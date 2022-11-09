@@ -25,7 +25,7 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      Asteroids.Game
   other-modules:
       Paths_Asteroids
   hs-source-dirs:
@@ -33,9 +33,11 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , linear
+    , sdl2
   default-language: Haskell2010
 
-executable Asteroids-exe
+executable asteroids
   main-is: Main.hs
   other-modules:
       Paths_Asteroids
@@ -45,6 +47,8 @@ executable Asteroids-exe
   build-depends:
       Asteroids
     , base >=4.7 && <5
+    , linear
+    , sdl2
   default-language: Haskell2010
 
 test-suite Asteroids-test
@@ -58,4 +62,6 @@ test-suite Asteroids-test
   build-depends:
       Asteroids
     , base >=4.7 && <5
+    , linear
+    , sdl2
   default-language: Haskell2010

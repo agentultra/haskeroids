@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Lib
+import Asteroids.Game
 
 main :: IO ()
-main = someFunc
+main = run
