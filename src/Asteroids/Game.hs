@@ -4,6 +4,7 @@
 module Asteroids.Game where
 
 import Control.Monad (unless)
+import Foreign.C.Types
 import Linear
 import qualified SDL
 import SDL (($=), WindowConfig (..))
@@ -25,6 +26,7 @@ data GameState
   , gameStateTicks       :: Double
   , gameStateCurrentTime :: Double
   , gameStateAccumulator :: Double
+  , gameStatePlayerShip  :: V2 CInt
   }
   deriving (Eq, Show)
 
@@ -35,6 +37,7 @@ initGameState renderer
   <*> pure 0.0
   <*> SDL.time
   <*> pure 0.0
+  <*> pure (V2 20 20)
 
 run :: IO ()
 run = do
@@ -65,21 +68,26 @@ loop state@GameState {..} = do
       state' = update state { gameStateCurrentTime = newTime
                             , gameStateAccumulator = gameStateAccumulator + frameTime
                             }
-  render gameStateRenderer
+  render state'
   unless qPressed $ loop state'
 
 update :: GameState -> GameState
 update state@GameState {..} =
   let nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
+                        , gameStatePlayerShip = gameStatePlayerShip + V2 1 0
                         }
   in
     if gameStateAccumulator >= delta
-    then state
+    then nextState
     else update nextState
 
-render :: SDL.Renderer -> IO ()
-render renderer = do
-  SDL.rendererDrawColor renderer $= V4 0 0 0 255
-  SDL.clear renderer
-  SDL.present renderer
+render :: GameState -> IO ()
+render GameState {..} = do
+  SDL.rendererDrawColor gameStateRenderer $= V4 0 0 0 255
+  SDL.clear gameStateRenderer
+
+  let shipRect = SDL.Rectangle (SDL.P gameStatePlayerShip) (V2 20 20)
+  SDL.rendererDrawColor gameStateRenderer $= V4 255 0 0 255
+  SDL.fillRect gameStateRenderer (Just shipRect)
+  SDL.present gameStateRenderer
