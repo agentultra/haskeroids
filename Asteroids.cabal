@@ -35,6 +35,7 @@ library
       base >=4.7 && <5
     , linear
     , sdl2
+    , vector
   default-language: Haskell2010
 
 executable asteroids
@@ -49,6 +50,7 @@ executable asteroids
     , base >=4.7 && <5
     , linear
     , sdl2
+    , vector
   default-language: Haskell2010
 
 test-suite Asteroids-test
@@ -64,4 +66,5 @@ test-suite Asteroids-test
     , base >=4.7 && <5
     , linear
     , sdl2
+    , vector
   default-language: Haskell2010
