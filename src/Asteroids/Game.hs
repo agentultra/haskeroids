@@ -24,13 +24,16 @@ delta = 0.0
 
 data GameState
   = GameState
-  { gameStateRenderer       :: SDL.Renderer
-  , gameStateTicks          :: Double
-  , gameStateCurrentTime    :: Double
-  , gameStateAccumulator    :: Double
-  , gameStatePlayerPosition :: V2 CInt
-  , gameStatePlayerSize     :: CInt
-  , gameStatePlayerRotation :: Float
+  { gameStateRenderer            :: SDL.Renderer
+  , gameStateTicks               :: Double
+  , gameStateCurrentTime         :: Double
+  , gameStateAccumulator         :: Double
+  , gameStatePlayerPosition      :: V2 CInt
+  , gameStatePlayerSize          :: CInt
+  , gameStatePlayerRotation      :: Float
+  , gameStatePlayerRotationSpeed :: Float
+  , gameStateLeftButtonPressed   :: Bool
+  , gameStateRightButtonPressed  :: Bool
   }
   deriving (Eq, Show)
 
@@ -42,8 +45,11 @@ initGameState renderer
   <*> SDL.time
   <*> pure 0.0
   <*> pure (V2 20 20)
-  <*> pure 10
+  <*> pure 20
   <*> pure 0.0
+  <*> pure 0.1
+  <*> pure False
+  <*> pure False
 
 run :: IO ()
 run = do
@@ -67,21 +73,41 @@ loop state@GameState {..} = do
             SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed &&
             SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeQ
           _ -> False
+      eventIsAPress event =
+        case SDL.eventPayload event of
+          SDL.KeyboardEvent keyboardEvent ->
+            SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed &&
+            SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeA
+          _ -> False
+      eventIsDPress event =
+        case SDL.eventPayload event of
+          SDL.KeyboardEvent keyboardEvent ->
+            SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed &&
+            SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeD
+          _ -> False
       qPressed = any eventIsQPress events
+      aPressed = any eventIsAPress events
+      dPressed = any eventIsDPress events
 
   newTime <- SDL.time
   let frameTime = newTime - gameStateCurrentTime
       state' = update state { gameStateCurrentTime = newTime
                             , gameStateAccumulator = gameStateAccumulator + frameTime
+                            , gameStateLeftButtonPressed = aPressed
+                            , gameStateRightButtonPressed = dPressed
                             }
   render state'
   unless qPressed $ loop state'
 
 update :: GameState -> GameState
 update state@GameState {..} =
-  let nextState = state { gameStateAccumulator = gameStateAccumulator - delta
+  let turnAmount
+        | gameStateLeftButtonPressed = -gameStatePlayerRotationSpeed
+        | gameStateRightButtonPressed = gameStatePlayerRotationSpeed
+        | otherwise = 0.0
+      nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
-                        , gameStatePlayerRotation = gameStatePlayerRotation + 0.01
+                        , gameStatePlayerRotation = gameStatePlayerRotation + turnAmount
                         }
   in
     if gameStateAccumulator >= delta
