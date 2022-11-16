@@ -22,34 +22,57 @@ windowConfig
 delta :: Double
 delta = 0.0
 
+data ButtonState
+  = ButtonState
+  { buttonStateUp    :: Bool
+  , buttonStateDown  :: Bool
+  , buttonStateLeft  :: Bool
+  , buttonStateRight :: Bool
+  }
+  deriving (Eq, Show)
+
+initButtonState :: ButtonState
+initButtonState = ButtonState False False False False
+
 data GameState
   = GameState
-  { gameStateRenderer            :: SDL.Renderer
-  , gameStateTicks               :: Double
-  , gameStateCurrentTime         :: Double
-  , gameStateAccumulator         :: Double
-  , gameStatePlayerPosition      :: V2 CInt
-  , gameStatePlayerSize          :: CInt
-  , gameStatePlayerRotation      :: Float
-  , gameStatePlayerRotationSpeed :: Float
-  , gameStateLeftButtonPressed   :: Bool
-  , gameStateRightButtonPressed  :: Bool
+  { gameStateRenderer              :: SDL.Renderer
+  , gameStateTicks                 :: Double
+  , gameStateCurrentTime           :: Double
+  , gameStateAccumulator           :: Double
+  , gameStatePlayerPosition        :: V2 CInt
+  , gameStatePlayerSize            :: CInt
+  , gameStatePlayerRotation        :: Float
+  , gameStatePlayerRotationSpeed   :: Float
+  , gameStatePlayerThrust          :: Float
+  , gameStatePlayerThrustSpeed     :: Float
+  , gameStatePlayerThrustMax       :: Float
+  , gameStatePlayerAcceleration    :: Float
+  , gameStatePlayerMaxAcceleration :: Float
+  , gameStateButtonState           :: ButtonState
   }
   deriving (Eq, Show)
 
 initGameState :: SDL.Renderer -> IO GameState
-initGameState renderer
-  = GameState
-  <$> pure renderer
-  <*> pure 0.0
-  <*> SDL.time
-  <*> pure 0.0
-  <*> pure (V2 20 20)
-  <*> pure 20
-  <*> pure 0.0
-  <*> pure 0.1
-  <*> pure False
-  <*> pure False
+initGameState renderer = do
+  currentTime <- SDL.time
+  pure
+    $ GameState
+    { gameStateRenderer              = renderer
+    , gameStateTicks                 = 0.0
+    , gameStateCurrentTime           = currentTime
+    , gameStateAccumulator           = 0.0
+    , gameStatePlayerPosition        = V2 20 20
+    , gameStatePlayerSize            = 20
+    , gameStatePlayerRotation        = 0.0
+    , gameStatePlayerRotationSpeed   = 0.1
+    , gameStatePlayerThrust          = 0.0
+    , gameStatePlayerThrustSpeed     = 0.2
+    , gameStatePlayerThrustMax       = 3.0
+    , gameStatePlayerAcceleration    = 0.0
+    , gameStatePlayerMaxAcceleration = 3.0
+    , gameStateButtonState           = initButtonState
+    }
 
 run :: IO ()
 run = do
@@ -67,34 +90,54 @@ run = do
 loop :: GameState -> IO ()
 loop state@GameState {..} = do
   events <- SDL.pollEvents
-  let eventIsQPress event =
-        case SDL.eventPayload event of
-          SDL.KeyboardEvent keyboardEvent ->
-            SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed &&
-            SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeQ
-          _ -> False
-      eventIsAPress event =
-        case SDL.eventPayload event of
-          SDL.KeyboardEvent keyboardEvent ->
-            SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed &&
-            SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeA
-          _ -> False
-      eventIsDPress event =
-        case SDL.eventPayload event of
-          SDL.KeyboardEvent keyboardEvent ->
-            SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed &&
-            SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeD
-          _ -> False
+  let eventIsQPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeQ
+      eventIsAPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeA
+      eventIsAUp event = isKeyboardKey event SDL.Released SDL.KeycodeA
+      eventIsDPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeD
+      eventIsDUp event = isKeyboardKey event SDL.Released SDL.KeycodeD
+      eventIsWPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeW
+      eventIsWUp event = isKeyboardKey event SDL.Released SDL.KeycodeW
+      eventIsSPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeS
+      eventIsSUp event = isKeyboardKey event SDL.Released SDL.KeycodeS
       qPressed = any eventIsQPress events
       aPressed = any eventIsAPress events
+      aUp = any eventIsAUp events
       dPressed = any eventIsDPress events
+      dUp = any eventIsDUp events
+      wPressed = any eventIsWPress events
+      wUp = any eventIsWUp events
+      sPressed = any eventIsSPress events
+      sUp = any eventIsSUp events
+      upButtonState
+        | wPressed && not (buttonStateUp gameStateButtonState) = True
+        | wUp && buttonStateUp gameStateButtonState = False
+        | otherwise = buttonStateUp gameStateButtonState
+      leftButtonState
+        | aPressed && not (buttonStateLeft gameStateButtonState) = True
+        | aUp && buttonStateLeft gameStateButtonState = False
+        | otherwise = buttonStateLeft gameStateButtonState
+      rightButtonState
+        | dPressed && not (buttonStateRight gameStateButtonState) = True
+        | dUp && buttonStateRight gameStateButtonState = False
+        | otherwise = buttonStateRight gameStateButtonState
+      downButtonState
+        | sPressed && not (buttonStateDown gameStateButtonState) = True
+        | sUp && buttonStateDown gameStateButtonState = False
+        | otherwise = buttonStateDown gameStateButtonState
+      buttonState'
+        = gameStateButtonState
+        { buttonStateUp = upButtonState
+        -- TODO (james): give this button states too
+        , buttonStateDown = downButtonState
+        , buttonStateLeft = leftButtonState
+        , buttonStateRight = rightButtonState
+        }
 
   newTime <- SDL.time
   let frameTime = newTime - gameStateCurrentTime
       state' = update state { gameStateCurrentTime = newTime
                             , gameStateAccumulator = gameStateAccumulator + frameTime
-                            , gameStateLeftButtonPressed = aPressed
-                            , gameStateRightButtonPressed = dPressed
+                            , gameStateButtonState = buttonState'
                             }
   render state'
   unless qPressed $ loop state'
@@ -102,12 +145,19 @@ loop state@GameState {..} = do
 update :: GameState -> GameState
 update state@GameState {..} =
   let turnAmount
-        | gameStateLeftButtonPressed = -gameStatePlayerRotationSpeed
-        | gameStateRightButtonPressed = gameStatePlayerRotationSpeed
+        | buttonStateLeft gameStateButtonState = -gameStatePlayerRotationSpeed
+        | buttonStateRight gameStateButtonState = gameStatePlayerRotationSpeed
+        | otherwise = 0.0
+      thrust
+        | buttonStateUp gameStateButtonState =
+          clamp
+          (gameStatePlayerThrust + gameStatePlayerThrustSpeed)
+          gameStatePlayerThrustMax
         | otherwise = 0.0
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
                         , gameStatePlayerRotation = gameStatePlayerRotation + turnAmount
+                        , gameStatePlayerThrust = thrust
                         }
   in
     if gameStateAccumulator >= delta
@@ -148,3 +198,16 @@ rotateOrigin origin@(V2 originX originY) rotation (SDL.P inputP) =
       x = fromIntegral pointX * c - fromIntegral pointY * s
       y = fromIntegral pointX * s + fromIntegral pointY * c
   in SDL.P (V2 (round x + originX) (round y + originY))
+
+isKeyboardKey :: SDL.Event -> SDL.InputMotion -> SDL.Keycode -> Bool
+isKeyboardKey event keyState keyCode =
+  case SDL.eventPayload event of
+    SDL.KeyboardEvent keyboardEvent ->
+      SDL.keyboardEventKeyMotion keyboardEvent == keyState &&
+      SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == keyCode
+    _ -> False
+
+clamp :: Ord a => a -> a -> a
+clamp clampMax value
+  | value > clampMax = clampMax
+  | otherwise        = value
