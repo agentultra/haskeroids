@@ -19,8 +19,8 @@ windowConfig
   , windowPosition = SDL.Centered
   }
 
-delta :: Double
-delta = 0.0
+delta :: Float
+delta = 0.1
 
 data KeyState = KeyDown | KeyRelease
   deriving (Eq, Show)
@@ -60,18 +60,19 @@ initButtonState
 data GameState
   = GameState
   { gameStateRenderer              :: SDL.Renderer
-  , gameStateTicks                 :: Double
-  , gameStateCurrentTime           :: Double
-  , gameStateAccumulator           :: Double
-  , gameStatePlayerPosition        :: V2 CInt
+  , gameStateTicks                 :: Float
+  , gameStateCurrentTime           :: Float
+  , gameStateAccumulator           :: Float
+  , gameStatePlayerPosition        :: V2 Float
   , gameStatePlayerSize            :: CInt
   , gameStatePlayerRotation        :: Float
   , gameStatePlayerRotationSpeed   :: Float
   , gameStatePlayerThrust          :: Float
   , gameStatePlayerThrustSpeed     :: Float
   , gameStatePlayerThrustMax       :: Float
-  , gameStatePlayerAcceleration    :: Float
+  , gameStatePlayerAcceleration    :: V2 Float
   , gameStatePlayerMaxAcceleration :: Float
+  , gameStatePlayerVelocity        :: V2 Float
   , gameStateButtonState           :: ButtonState
   }
   deriving (Eq, Show)
@@ -92,9 +93,10 @@ initGameState renderer = do
     , gameStatePlayerThrust          = 0.0
     , gameStatePlayerThrustSpeed     = 0.2
     , gameStatePlayerThrustMax       = 3.0
-    , gameStatePlayerAcceleration    = 0.0
+    , gameStatePlayerAcceleration    = V2 0.0 0.0
     , gameStatePlayerMaxAcceleration = 3.0
     , gameStateButtonState           = initButtonState
+    , gameStatePlayerVelocity        = V2 0.0 0.0
     }
 
 run :: IO ()
@@ -163,11 +165,12 @@ loop state@GameState {..} = do
                             , gameStateButtonState = buttonState'
                             }
   render state'
-  unless qPressed $ loop state'
+  unless qPressed $ loop state' { gameStatePlayerAcceleration = V2 0.0 0.0 }
 
 update :: GameState -> GameState
 update state@GameState {..} =
-  let turnAmount
+  let (V2 ax ay) = gameStatePlayerAcceleration
+      turnAmount
         | keyDown $ buttonStateLeft gameStateButtonState = -gameStatePlayerRotationSpeed
         | keyDown $ buttonStateRight gameStateButtonState = gameStatePlayerRotationSpeed
         | otherwise = 0.0
@@ -177,13 +180,24 @@ update state@GameState {..} =
           (gameStatePlayerThrust + gameStatePlayerThrustSpeed)
           gameStatePlayerThrustMax
         | otherwise = 0.0
+      acceleration
+        | keyDown $ buttonStateUp gameStateButtonState
+        = V2
+          (clamp (ax + thrust * cos gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
+          (clamp (ay + thrust * sin gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
+        | otherwise = gameStatePlayerAcceleration
+      position = gameStatePlayerPosition + gameStatePlayerVelocity ^* delta
+      velocity = gameStatePlayerVelocity + acceleration ^* delta
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
+                        , gameStatePlayerPosition = position
                         , gameStatePlayerRotation = gameStatePlayerRotation + turnAmount
                         , gameStatePlayerThrust = thrust
+                        , gameStatePlayerAcceleration = acceleration
+                        , gameStatePlayerVelocity = velocity
                         }
   in
-    if gameStateAccumulator >= delta
+    if gameStateAccumulator <= delta
     then nextState
     else update nextState
 
@@ -199,10 +213,10 @@ render GameState {..} = do
     gameStateRenderer
   SDL.present gameStateRenderer
 
-renderPlayerShip :: V2 CInt -> CInt -> Float -> SDL.Renderer -> IO ()
+renderPlayerShip :: V2 Float -> CInt -> Float -> SDL.Renderer -> IO ()
 renderPlayerShip position size rotation renderer = do
   SDL.rendererDrawColor renderer $= V4 0 255 0 255
-  let shipPoints = V.map (rotateOrigin position rotation) . playerShipPoints position $ size
+  let shipPoints = V.map (rotateOrigin (truncate <$> position) rotation) . playerShipPoints (truncate <$> position) $ size
   SDL.drawLines renderer shipPoints
 
 playerShipPoints :: V2 CInt -> CInt -> Vector (SDL.Point V2 CInt)
