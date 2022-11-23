@@ -22,17 +22,40 @@ windowConfig
 delta :: Double
 delta = 0.0
 
+data KeyState = KeyDown | KeyRelease
+  deriving (Eq, Show)
+
+instance Semigroup KeyState where
+  KeyDown <> KeyDown = KeyDown
+  KeyDown <> KeyRelease = KeyDown
+  KeyRelease <> KeyDown = KeyRelease
+  KeyRelease <> KeyRelease = KeyRelease
+
+keyDown :: KeyState -> Bool
+keyDown KeyDown = True
+keyDown _       = False
+
+keyRelease :: KeyState -> Bool
+keyRelease KeyRelease = True
+keyRelease _          = False
+
 data ButtonState
   = ButtonState
-  { buttonStateUp    :: Bool
-  , buttonStateDown  :: Bool
-  , buttonStateLeft  :: Bool
-  , buttonStateRight :: Bool
+  { buttonStateUp    :: KeyState
+  , buttonStateDown  :: KeyState
+  , buttonStateLeft  :: KeyState
+  , buttonStateRight :: KeyState
   }
   deriving (Eq, Show)
 
 initButtonState :: ButtonState
-initButtonState = ButtonState False False False False
+initButtonState
+  = ButtonState
+  { buttonStateUp    = KeyRelease
+  , buttonStateDown  = KeyRelease
+  , buttonStateLeft  = KeyRelease
+  , buttonStateRight = KeyRelease
+  }
 
 data GameState
   = GameState
@@ -92,37 +115,37 @@ loop state@GameState {..} = do
   events <- SDL.pollEvents
   let eventIsQPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeQ
       eventIsAPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeA
-      eventIsAUp event = isKeyboardKey event SDL.Released SDL.KeycodeA
+      eventIsARelease event = isKeyboardKey event SDL.Released SDL.KeycodeA
       eventIsDPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeD
-      eventIsDUp event = isKeyboardKey event SDL.Released SDL.KeycodeD
+      eventIsDRelease event = isKeyboardKey event SDL.Released SDL.KeycodeD
       eventIsWPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeW
-      eventIsWUp event = isKeyboardKey event SDL.Released SDL.KeycodeW
+      eventIsWRelease event = isKeyboardKey event SDL.Released SDL.KeycodeW
       eventIsSPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeS
-      eventIsSUp event = isKeyboardKey event SDL.Released SDL.KeycodeS
+      eventIsSRelease event = isKeyboardKey event SDL.Released SDL.KeycodeS
       qPressed = any eventIsQPress events
       aPressed = any eventIsAPress events
-      aUp = any eventIsAUp events
+      aUp = any eventIsARelease events
       dPressed = any eventIsDPress events
-      dUp = any eventIsDUp events
+      dUp = any eventIsDRelease events
       wPressed = any eventIsWPress events
-      wUp = any eventIsWUp events
+      wUp = any eventIsWRelease events
       sPressed = any eventIsSPress events
-      sUp = any eventIsSUp events
+      sUp = any eventIsSRelease events
       upButtonState
-        | wPressed && not (buttonStateUp gameStateButtonState) = True
-        | wUp && buttonStateUp gameStateButtonState = False
+        | wPressed && keyRelease (buttonStateUp gameStateButtonState) = KeyDown
+        | wUp && keyDown (buttonStateUp gameStateButtonState) = KeyRelease
         | otherwise = buttonStateUp gameStateButtonState
       leftButtonState
-        | aPressed && not (buttonStateLeft gameStateButtonState) = True
-        | aUp && buttonStateLeft gameStateButtonState = False
+        | aPressed && keyRelease (buttonStateLeft gameStateButtonState) = KeyDown
+        | aUp && keyDown (buttonStateLeft gameStateButtonState) = KeyRelease
         | otherwise = buttonStateLeft gameStateButtonState
       rightButtonState
-        | dPressed && not (buttonStateRight gameStateButtonState) = True
-        | dUp && buttonStateRight gameStateButtonState = False
+        | dPressed && keyRelease (buttonStateRight gameStateButtonState) = KeyDown
+        | dUp && keyDown (buttonStateRight gameStateButtonState) = KeyRelease
         | otherwise = buttonStateRight gameStateButtonState
       downButtonState
-        | sPressed && not (buttonStateDown gameStateButtonState) = True
-        | sUp && buttonStateDown gameStateButtonState = False
+        | sPressed && keyRelease (buttonStateDown gameStateButtonState) = KeyDown
+        | sUp && keyDown (buttonStateDown gameStateButtonState) = KeyRelease
         | otherwise = buttonStateDown gameStateButtonState
       buttonState'
         = gameStateButtonState
@@ -145,11 +168,11 @@ loop state@GameState {..} = do
 update :: GameState -> GameState
 update state@GameState {..} =
   let turnAmount
-        | buttonStateLeft gameStateButtonState = -gameStatePlayerRotationSpeed
-        | buttonStateRight gameStateButtonState = gameStatePlayerRotationSpeed
+        | keyDown $ buttonStateLeft gameStateButtonState = -gameStatePlayerRotationSpeed
+        | keyDown $ buttonStateRight gameStateButtonState = gameStatePlayerRotationSpeed
         | otherwise = 0.0
       thrust
-        | buttonStateUp gameStateButtonState =
+        | keyDown $ buttonStateUp gameStateButtonState =
           clamp
           (gameStatePlayerThrust + gameStatePlayerThrustSpeed)
           gameStatePlayerThrustMax

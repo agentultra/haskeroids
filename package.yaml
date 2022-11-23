@@ -60,3 +60,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - Asteroids
+    - hspec
+    - QuickCheck
+    - quickcheck-classes
