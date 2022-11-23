@@ -216,15 +216,17 @@ render GameState {..} = do
 renderPlayerShip :: V2 Float -> CInt -> Float -> SDL.Renderer -> IO ()
 renderPlayerShip position size rotation renderer = do
   SDL.rendererDrawColor renderer $= V4 0 255 0 255
-  let shipPoints = V.map (rotateOrigin (truncate <$> position) rotation) . playerShipPoints (truncate <$> position) $ size
+  let shipPoints
+        = V.map (rotateOrigin (truncate <$> position) rotation)
+        . playerShipPoints (truncate <$> position) $ size
   SDL.drawLines renderer shipPoints
 
 playerShipPoints :: V2 CInt -> CInt -> Vector (SDL.Point V2 CInt)
 playerShipPoints position size
-  = V.fromList [ SDL.P $ position + V2 0 (-size)
-               , SDL.P $ position + V2 (size `div` 2) size
-               , SDL.P $ position + V2 (-(size `div` 2)) size
-               , SDL.P $ position + V2 0 (-size)
+  = V.fromList [ SDL.P $ position + V2 size 0
+               , SDL.P $ position + V2 (-size) ((-size) `div` 2)
+               , SDL.P $ position + V2 (-size) (size `div` 2)
+               , SDL.P $ position + V2 size 0
                ]
 
 rotateOrigin :: V2 CInt -> Float -> SDL.Point V2 CInt -> SDL.Point V2 CInt
