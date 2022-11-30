@@ -190,7 +190,7 @@ update state@GameState {..} =
       velocity = gameStatePlayerVelocity + acceleration ^* delta
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
-                        , gameStatePlayerPosition = position
+                        , gameStatePlayerPosition = wrapTorus position (fromIntegral gameStatePlayerSize)
                         , gameStatePlayerRotation = gameStatePlayerRotation + turnAmount
                         , gameStatePlayerThrust = thrust
                         , gameStatePlayerAcceleration = acceleration
@@ -250,3 +250,18 @@ clamp :: Ord a => a -> a -> a
 clamp clampMax value
   | value > clampMax = clampMax
   | otherwise        = value
+
+wrapTorus :: V2 Float -> Int -> V2 Float
+wrapTorus (V2 px py) size = V2 (wrapX px size) (wrapY py size)
+  where
+    wrapX :: Float -> Int -> Float
+    wrapX x s
+      | (x - fromIntegral s) > 800 = fromIntegral (-s)
+      | (x + fromIntegral s) < 0 = 800 + fromIntegral s
+      | otherwise = x
+
+    wrapY :: Float -> Int -> Float
+    wrapY y s
+      | (y - fromIntegral s) > 600 = fromIntegral (-s)
+      | (y + fromIntegral s) < 0 = 600 + fromIntegral s
+      | otherwise = y
