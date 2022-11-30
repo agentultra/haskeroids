@@ -47,6 +47,7 @@ data ButtonState
   , buttonStateDown  :: KeyState
   , buttonStateLeft  :: KeyState
   , buttonStateRight :: KeyState
+  , buttonStateFire  :: KeyState
   }
   deriving (Eq, Show)
 
@@ -57,6 +58,7 @@ initButtonState
   , buttonStateDown  = KeyRelease
   , buttonStateLeft  = KeyRelease
   , buttonStateRight = KeyRelease
+  , buttonStateFire  = KeyRelease
   }
 
 data GameState
@@ -77,6 +79,9 @@ data GameState
   , gameStatePlayerMaxVelocity   :: Float
   , gameStatePlayerVelocity      :: V2 Float
   , gameStateButtonState         :: ButtonState
+  , gameStateBullets             :: [V2 Float]
+  , gameStateBulletTimer         :: Float
+  , gameStateBulletTimerMax       :: Float
   }
   deriving (Eq, Show)
 
@@ -101,6 +106,9 @@ initGameState renderer = do
     , gameStatePlayerMaxVelocity   = 49.0
     , gameStateButtonState         = initButtonState
     , gameStatePlayerVelocity      = V2 0.0 0.0
+    , gameStateBullets             = []
+    , gameStateBulletTimer         = 0.0
+    , gameStateBulletTimerMax       = 1.0
     }
 
 run :: IO ()
@@ -128,6 +136,8 @@ loop state@GameState {..} = do
       eventIsWRelease event = isKeyboardKey event SDL.Released SDL.KeycodeW
       eventIsSPress event = isKeyboardKey event SDL.Pressed SDL.KeycodeS
       eventIsSRelease event = isKeyboardKey event SDL.Released SDL.KeycodeS
+      eventIsSpacePress event = isKeyboardKey event SDL.Pressed SDL.KeycodeSpace
+      eventIsSpaceRelease event = isKeyboardKey event SDL.Released SDL.KeycodeSpace
       qPressed = any eventIsQPress events
       aPressed = any eventIsAPress events
       aUp = any eventIsARelease events
@@ -137,6 +147,8 @@ loop state@GameState {..} = do
       wUp = any eventIsWRelease events
       sPressed = any eventIsSPress events
       sUp = any eventIsSRelease events
+      spacePressed = any eventIsSpacePress events
+      spaceUp = any eventIsSpaceRelease events
       upButtonState
         | wPressed && keyRelease (buttonStateUp gameStateButtonState) = KeyDown
         | wUp && keyDown (buttonStateUp gameStateButtonState) = KeyRelease
@@ -153,6 +165,10 @@ loop state@GameState {..} = do
         | sPressed && keyRelease (buttonStateDown gameStateButtonState) = KeyDown
         | sUp && keyDown (buttonStateDown gameStateButtonState) = KeyRelease
         | otherwise = buttonStateDown gameStateButtonState
+      fireButtonState
+        | spacePressed && keyRelease (buttonStateFire gameStateButtonState) = KeyDown
+        | spaceUp && keyDown (buttonStateFire gameStateButtonState) = KeyRelease
+        | otherwise = buttonStateFire gameStateButtonState
       buttonState'
         = gameStateButtonState
         { buttonStateUp = upButtonState
@@ -160,6 +176,7 @@ loop state@GameState {..} = do
         , buttonStateDown = downButtonState
         , buttonStateLeft = leftButtonState
         , buttonStateRight = rightButtonState
+        , buttonStateFire = fireButtonState
         }
 
   newTime <- SDL.time
@@ -194,6 +211,12 @@ update state@GameState {..} =
         | otherwise = gameStatePlayerAcceleration
       position = gameStatePlayerPosition + gameStatePlayerVelocity ^* delta
       velocity = gameStatePlayerVelocity + acceleration ^* delta
+      bulletTimer
+        | keyDown (buttonStateFire gameStateButtonState) && (gameStateBulletTimer + delta < gameStateBulletTimerMax) = gameStateBulletTimer + delta
+        | otherwise = 0.0
+      bullets = if keyDown (buttonStateFire gameStateButtonState) && (bulletTimer == 0)
+        then gameStatePlayerPosition : gameStateBullets
+        else gameStateBullets
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
                         , gameStatePlayerPosition = wrapTorus position (fromIntegral gameStatePlayerSize)
@@ -201,6 +224,8 @@ update state@GameState {..} =
                         , gameStatePlayerThrust = thrust
                         , gameStatePlayerAcceleration = acceleration
                         , gameStatePlayerVelocity = clampVector velocity gameStatePlayerMaxVelocity
+                        , gameStateBulletTimer = bulletTimer
+                        , gameStateBullets = bullets
                         }
   in
     if gameStateAccumulator <= delta
