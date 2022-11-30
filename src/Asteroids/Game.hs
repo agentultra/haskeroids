@@ -176,15 +176,15 @@ update state@GameState {..} =
         | otherwise = 0.0
       thrust
         | keyDown $ buttonStateUp gameStateButtonState =
-          clamp
+          min
           (gameStatePlayerThrust + gameStatePlayerThrustSpeed)
           gameStatePlayerThrustMax
         | otherwise = 0.0
       acceleration
         | keyDown $ buttonStateUp gameStateButtonState
         = V2
-          (clamp (ax + thrust * cos gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
-          (clamp (ay + thrust * sin gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
+          (min (ax + thrust * cos gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
+          (min (ay + thrust * sin gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
         | otherwise = gameStatePlayerAcceleration
       position = gameStatePlayerPosition + gameStatePlayerVelocity ^* delta
       velocity = gameStatePlayerVelocity + acceleration ^* delta
@@ -245,11 +245,6 @@ isKeyboardKey event keyState keyCode =
       SDL.keyboardEventKeyMotion keyboardEvent == keyState &&
       SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == keyCode
     _ -> False
-
-clamp :: Ord a => a -> a -> a
-clamp clampMax value
-  | value > clampMax = clampMax
-  | otherwise        = value
 
 wrapTorus :: V2 Float -> Int -> V2 Float
 wrapTorus (V2 px py) size = V2 (wrapX px size) (wrapY py size)
