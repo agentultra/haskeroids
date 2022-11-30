@@ -62,6 +62,7 @@ initButtonState
 data GameState
   = GameState
   { gameStateRenderer            :: SDL.Renderer
+  , gameStateFps                 :: Float
   , gameStateTicks               :: Float
   , gameStateCurrentTime         :: Float
   , gameStateAccumulator         :: Float
@@ -84,21 +85,22 @@ initGameState renderer = do
   currentTime <- SDL.time
   pure
     $ GameState
-    { gameStateRenderer              = renderer
-    , gameStateTicks                 = 0.0
-    , gameStateCurrentTime           = currentTime
-    , gameStateAccumulator           = 0.0
-    , gameStatePlayerPosition        = V2 20 20
-    , gameStatePlayerSize            = 20
-    , gameStatePlayerRotation        = 0.0
-    , gameStatePlayerRotationSpeed   = 0.1
-    , gameStatePlayerThrust          = 0.0
-    , gameStatePlayerThrustSpeed     = 0.2
-    , gameStatePlayerThrustMax       = 3.0
-    , gameStatePlayerAcceleration    = V2 0.0 0.0
-    , gameStatePlayerMaxVelocity     = 49.0
-    , gameStateButtonState           = initButtonState
-    , gameStatePlayerVelocity        = V2 0.0 0.0
+    { gameStateRenderer            = renderer
+    , gameStateFps                 = 0.0
+    , gameStateTicks               = 0.0
+    , gameStateCurrentTime         = currentTime
+    , gameStateAccumulator         = 0.0
+    , gameStatePlayerPosition      = V2 20 20
+    , gameStatePlayerSize          = 20
+    , gameStatePlayerRotation      = 0.0
+    , gameStatePlayerRotationSpeed = 0.1
+    , gameStatePlayerThrust        = 0.0
+    , gameStatePlayerThrustSpeed   = 0.2
+    , gameStatePlayerThrustMax     = 3.0
+    , gameStatePlayerAcceleration  = V2 0.0 0.0
+    , gameStatePlayerMaxVelocity   = 49.0
+    , gameStateButtonState         = initButtonState
+    , gameStatePlayerVelocity      = V2 0.0 0.0
     }
 
 run :: IO ()
@@ -162,9 +164,11 @@ loop state@GameState {..} = do
 
   newTime <- SDL.time
   let frameTime = newTime - gameStateCurrentTime
+      fps = 1 / frameTime
       state' = update state { gameStateCurrentTime = newTime
                             , gameStateAccumulator = gameStateAccumulator + frameTime
                             , gameStateButtonState = buttonState'
+                            , gameStateFps         = fps
                             }
   render state'
   unless qPressed $ loop state' { gameStatePlayerAcceleration = V2 0.0 0.0 }
