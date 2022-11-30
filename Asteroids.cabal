@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Asteroids.Game
+      Asteroids.Linear.Vector
   other-modules:
       Paths_Asteroids
   hs-source-dirs:

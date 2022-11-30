@@ -11,6 +11,8 @@ import Linear
 import qualified SDL
 import SDL (($=), WindowConfig (..))
 
+import Asteroids.Linear.Vector
+
 windowConfig :: WindowConfig
 windowConfig
   = SDL.defaultWindow
@@ -59,21 +61,21 @@ initButtonState
 
 data GameState
   = GameState
-  { gameStateRenderer              :: SDL.Renderer
-  , gameStateTicks                 :: Float
-  , gameStateCurrentTime           :: Float
-  , gameStateAccumulator           :: Float
-  , gameStatePlayerPosition        :: V2 Float
-  , gameStatePlayerSize            :: CInt
-  , gameStatePlayerRotation        :: Float
-  , gameStatePlayerRotationSpeed   :: Float
-  , gameStatePlayerThrust          :: Float
-  , gameStatePlayerThrustSpeed     :: Float
-  , gameStatePlayerThrustMax       :: Float
-  , gameStatePlayerAcceleration    :: V2 Float
-  , gameStatePlayerMaxAcceleration :: Float
-  , gameStatePlayerVelocity        :: V2 Float
-  , gameStateButtonState           :: ButtonState
+  { gameStateRenderer            :: SDL.Renderer
+  , gameStateTicks               :: Float
+  , gameStateCurrentTime         :: Float
+  , gameStateAccumulator         :: Float
+  , gameStatePlayerPosition      :: V2 Float
+  , gameStatePlayerSize          :: CInt
+  , gameStatePlayerRotation      :: Float
+  , gameStatePlayerRotationSpeed :: Float
+  , gameStatePlayerThrust        :: Float
+  , gameStatePlayerThrustSpeed   :: Float
+  , gameStatePlayerThrustMax     :: Float
+  , gameStatePlayerAcceleration  :: V2 Float
+  , gameStatePlayerMaxVelocity   :: Float
+  , gameStatePlayerVelocity      :: V2 Float
+  , gameStateButtonState         :: ButtonState
   }
   deriving (Eq, Show)
 
@@ -94,7 +96,7 @@ initGameState renderer = do
     , gameStatePlayerThrustSpeed     = 0.2
     , gameStatePlayerThrustMax       = 3.0
     , gameStatePlayerAcceleration    = V2 0.0 0.0
-    , gameStatePlayerMaxAcceleration = 3.0
+    , gameStatePlayerMaxVelocity     = 49.0
     , gameStateButtonState           = initButtonState
     , gameStatePlayerVelocity        = V2 0.0 0.0
     }
@@ -183,8 +185,8 @@ update state@GameState {..} =
       acceleration
         | keyDown $ buttonStateUp gameStateButtonState
         = V2
-          (min (ax + thrust * cos gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
-          (min (ay + thrust * sin gameStatePlayerRotation) gameStatePlayerMaxAcceleration)
+          (ax + thrust * cos gameStatePlayerRotation)
+          (ay + thrust * sin gameStatePlayerRotation)
         | otherwise = gameStatePlayerAcceleration
       position = gameStatePlayerPosition + gameStatePlayerVelocity ^* delta
       velocity = gameStatePlayerVelocity + acceleration ^* delta
@@ -194,7 +196,7 @@ update state@GameState {..} =
                         , gameStatePlayerRotation = gameStatePlayerRotation + turnAmount
                         , gameStatePlayerThrust = thrust
                         , gameStatePlayerAcceleration = acceleration
-                        , gameStatePlayerVelocity = velocity
+                        , gameStatePlayerVelocity = clampVector velocity gameStatePlayerMaxVelocity
                         }
   in
     if gameStateAccumulator <= delta
