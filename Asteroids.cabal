@@ -34,6 +34,7 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , deque
     , linear
     , sdl2
     , vector
@@ -49,6 +50,7 @@ executable asteroids
   build-depends:
       Asteroids
     , base >=4.7 && <5
+    , deque
     , linear
     , sdl2
     , vector
@@ -66,6 +68,7 @@ test-suite Asteroids-test
       Asteroids
     , QuickCheck
     , base >=4.7 && <5
+    , deque
     , hspec
     , linear
     , quickcheck-classes

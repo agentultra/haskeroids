@@ -3,7 +3,9 @@
 
 module Asteroids.Game where
 
-import Control.Monad (unless)
+import Control.Monad (forM_, unless)
+import Deque.Strict (Deque)
+import qualified Deque.Strict as D
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Foreign.C.Types
@@ -79,11 +81,63 @@ data GameState
   , gameStatePlayerMaxVelocity   :: Float
   , gameStatePlayerVelocity      :: V2 Float
   , gameStateButtonState         :: ButtonState
-  , gameStateBullets             :: [V2 Float]
+  , gameStateBullets             :: Deque Bullet
   , gameStateBulletTimer         :: Float
-  , gameStateBulletTimerMax       :: Float
+  , gameStateBulletTimerMax      :: Float
+  , gameStateBulletAgeMax        :: Int
   }
   deriving (Eq, Show)
+
+maxBullets :: Int
+maxBullets = 15
+
+data Bullet
+  = Bullet
+  { bulletPosition     :: V2 Float
+  , bulletVelocity     :: V2 Float
+  , bulletAcceleration :: V2 Float
+  , bulletRotation     :: Float
+  , bulletTick         :: Int
+  }
+  deriving (Eq, Show)
+
+fireBullet
+  :: V2 Float
+  -> V2 Float
+  -> V2 Float
+  -> Float
+  -> Int
+  -> Deque Bullet
+  -> Deque Bullet
+fireBullet pos vel acc rot t bullets =
+  let bullet
+        = Bullet
+        { bulletPosition = pos + V2 10 10
+        , bulletVelocity = vel
+        , bulletAcceleration = acc
+        , bulletRotation = rot
+        , bulletTick  = t
+        }
+      bullets' = bullet `D.cons` bullets
+  in D.take maxBullets bullets'
+
+updateBulletPhysics :: Deque Bullet -> Deque Bullet
+updateBulletPhysics = fmap updateBullet
+  where
+    updateBullet :: Bullet -> Bullet
+    updateBullet b@Bullet {..} =
+      let position = bulletPosition + bulletAcceleration ^* delta
+      in b { bulletPosition = position
+           }
+
+updateBulletAge :: GameState -> GameState
+updateBulletAge state = state
+  { gameStateBullets = D.takeWhile young . gameStateBullets $ state
+  }
+  where
+    young :: Bullet -> Bool
+    young Bullet {..} =
+      (truncate . gameStateTicks $ state) - bulletTick < gameStateBulletAgeMax state
 
 initGameState :: SDL.Renderer -> IO GameState
 initGameState renderer = do
@@ -106,9 +160,10 @@ initGameState renderer = do
     , gameStatePlayerMaxVelocity   = 49.0
     , gameStateButtonState         = initButtonState
     , gameStatePlayerVelocity      = V2 0.0 0.0
-    , gameStateBullets             = []
+    , gameStateBullets             = mempty
     , gameStateBulletTimer         = 0.0
-    , gameStateBulletTimerMax       = 1.0
+    , gameStateBulletTimerMax      = 1.0
+    , gameStateBulletAgeMax        = 50
     }
 
 run :: IO ()
@@ -188,7 +243,8 @@ loop state@GameState {..} = do
                             , gameStateFps         = fps
                             }
   render state'
-  unless qPressed $ loop state' { gameStatePlayerAcceleration = V2 0.0 0.0 }
+  let state'' = updateBulletAge state'
+  unless qPressed $ loop state'' { gameStatePlayerAcceleration = V2 0.0 0.0 }
 
 update :: GameState -> GameState
 update state@GameState {..} =
@@ -215,7 +271,13 @@ update state@GameState {..} =
         | keyDown (buttonStateFire gameStateButtonState) && (gameStateBulletTimer + delta < gameStateBulletTimerMax) = gameStateBulletTimer + delta
         | otherwise = 0.0
       bullets = if keyDown (buttonStateFire gameStateButtonState) && (bulletTimer == 0)
-        then gameStatePlayerPosition : gameStateBullets
+        then fireBullet
+             gameStatePlayerPosition
+             gameStatePlayerAcceleration
+             gameStatePlayerVelocity
+             gameStatePlayerRotation
+             (truncate gameStateTicks)
+             gameStateBullets
         else gameStateBullets
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
@@ -225,7 +287,7 @@ update state@GameState {..} =
                         , gameStatePlayerAcceleration = acceleration
                         , gameStatePlayerVelocity = clampVector velocity gameStatePlayerMaxVelocity
                         , gameStateBulletTimer = bulletTimer
-                        , gameStateBullets = bullets
+                        , gameStateBullets = updateBulletPhysics bullets
                         }
   in
     if gameStateAccumulator <= delta
@@ -242,6 +304,7 @@ render GameState {..} = do
     gameStatePlayerSize
     gameStatePlayerRotation
     gameStateRenderer
+  renderBullets gameStateBullets gameStateRenderer
   SDL.present gameStateRenderer
 
 renderPlayerShip :: V2 Float -> CInt -> Float -> SDL.Renderer -> IO ()
@@ -259,6 +322,13 @@ playerShipPoints position size
                , SDL.P $ position + V2 (-size) (size `div` 2)
                , SDL.P $ position + V2 size 0
                ]
+
+renderBullets :: Deque Bullet -> SDL.Renderer -> IO ()
+renderBullets bullets renderer = do
+  SDL.rendererDrawColor renderer $= V4 255 0 0 255
+  forM_ bullets $ \Bullet {..} -> do
+    let br = SDL.Rectangle (SDL.P (truncate <$> bulletPosition)) (V2 10 10)
+    SDL.fillRect renderer (Just br)
 
 rotateOrigin :: V2 CInt -> Float -> SDL.Point V2 CInt -> SDL.Point V2 CInt
 rotateOrigin origin@(V2 originX originY) rotation (SDL.P inputP) =
