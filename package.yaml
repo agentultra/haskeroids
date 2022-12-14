@@ -23,6 +23,7 @@ dependencies:
 - base >= 4.7 && < 5
 - deque
 - linear
+- mersenne-random-pure64
 - sdl2
 - vector
 
