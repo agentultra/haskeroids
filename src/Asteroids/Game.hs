@@ -6,8 +6,7 @@ module Asteroids.Game where
 import Control.Monad (forM_, unless)
 import Deque.Strict (Deque)
 import qualified Deque.Strict as D
-import Data.Vector.Storable (Vector)
-import qualified Data.Vector.Storable as V
+import qualified Data.Vector.Storable as VS
 import Foreign.C.Types
 import Linear
 import qualified SDL
@@ -308,17 +307,17 @@ renderPlayerShip :: V2 Float -> CInt -> Float -> SDL.Renderer -> IO ()
 renderPlayerShip position size rotation renderer = do
   SDL.rendererDrawColor renderer $= V4 0 255 0 255
   let shipPoints
-        = V.map (rotateOrigin (truncate <$> position) rotation)
+        = VS.map (rotateOrigin (truncate <$> position) rotation)
         . playerShipPoints (truncate <$> position) $ size
   SDL.drawLines renderer shipPoints
 
-playerShipPoints :: V2 CInt -> CInt -> Vector (SDL.Point V2 CInt)
+playerShipPoints :: V2 CInt -> CInt -> VS.Vector (SDL.Point V2 CInt)
 playerShipPoints position size
-  = V.fromList [ SDL.P $ position + V2 size 0
-               , SDL.P $ position + V2 (-size) ((-size) `div` 2)
-               , SDL.P $ position + V2 (-size) (size `div` 2)
-               , SDL.P $ position + V2 size 0
-               ]
+  = VS.fromList [ SDL.P $ position + V2 size 0
+                , SDL.P $ position + V2 (-size) ((-size) `div` 2)
+                , SDL.P $ position + V2 (-size) (size `div` 2)
+                , SDL.P $ position + V2 size 0
+                ]
 
 renderBullets :: Deque Bullet -> SDL.Renderer -> IO ()
 renderBullets bullets renderer = do
