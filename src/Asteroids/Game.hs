@@ -13,7 +13,7 @@ import Linear
 import qualified SDL
 import SDL (($=), WindowConfig (..))
 
-import Asteroids.Linear.Vector
+import qualified Asteroids.Linear.Vector as AV
 
 windowConfig :: WindowConfig
 windowConfig
@@ -95,27 +95,26 @@ data Bullet
   = Bullet
   { bulletPosition     :: V2 Float
   , bulletVelocity     :: V2 Float
-  , bulletAcceleration :: V2 Float
-  , bulletRotation     :: Float
   , bulletTick         :: Int
   }
   deriving (Eq, Show)
 
 fireBullet
   :: V2 Float
-  -> V2 Float
-  -> V2 Float
   -> Float
   -> Int
   -> Deque Bullet
   -> Deque Bullet
-fireBullet pos vel acc rot t bullets =
-  let bullet
+fireBullet pos@(V2 px py) rot t bullets =
+  let bx = 25 * cos rot + px
+      by = 25 * sin rot + py
+      bpos = V2 bx by
+      bdir = bpos ^-^ pos
+      bullet
         = Bullet
-        { bulletPosition = pos + V2 10 10
-        , bulletVelocity = vel
-        , bulletAcceleration = acc
-        , bulletRotation = rot
+        { bulletPosition = bpos
+        -- the unit vector * magnitude scalar
+        , bulletVelocity = (bdir ^/ AV.length bdir) * 70
         , bulletTick  = t
         }
       bullets' = bullet `D.cons` bullets
@@ -126,8 +125,8 @@ updateBulletPhysics = fmap updateBullet
   where
     updateBullet :: Bullet -> Bullet
     updateBullet b@Bullet {..} =
-      let position = bulletPosition + bulletAcceleration ^* delta
-      in b { bulletPosition = position
+      let position = bulletPosition + bulletVelocity ^* delta
+      in b { bulletPosition = wrapTorus position 10
            }
 
 updateBulletAge :: GameState -> GameState
@@ -273,8 +272,6 @@ update state@GameState {..} =
       bullets = if keyDown (buttonStateFire gameStateButtonState) && (bulletTimer == 0)
         then fireBullet
              gameStatePlayerPosition
-             gameStatePlayerAcceleration
-             gameStatePlayerVelocity
              gameStatePlayerRotation
              (truncate gameStateTicks)
              gameStateBullets
@@ -285,7 +282,7 @@ update state@GameState {..} =
                         , gameStatePlayerRotation = gameStatePlayerRotation + turnAmount
                         , gameStatePlayerThrust = thrust
                         , gameStatePlayerAcceleration = acceleration
-                        , gameStatePlayerVelocity = clampVector velocity gameStatePlayerMaxVelocity
+                        , gameStatePlayerVelocity = AV.clampVector velocity gameStatePlayerMaxVelocity
                         , gameStateBulletTimer = bulletTimer
                         , gameStateBullets = updateBulletPhysics bullets
                         }
