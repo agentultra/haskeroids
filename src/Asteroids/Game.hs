@@ -4,8 +4,12 @@
 module Asteroids.Game where
 
 import Control.Monad (forM_, unless)
+import Data.Bifunctor
+import Data.Maybe
 import Deque.Strict (Deque)
 import qualified Deque.Strict as D
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 import qualified Data.Vector.Storable as VS
 import Foreign.C.Types
 import Linear
@@ -13,6 +17,8 @@ import qualified SDL
 import SDL (($=), WindowConfig (..))
 
 import qualified Asteroids.Linear.Vector as AV
+
+import qualified Debug.Trace as Debug
 
 windowConfig :: WindowConfig
 windowConfig
@@ -62,6 +68,31 @@ initButtonState
   , buttonStateFire  = KeyRelease
   }
 
+data PseudoRandom a
+  = PseudoRandom
+  { pseudoRandomValues :: Vector a
+  , pseudoRandomIndex  :: Int
+  }
+  deriving (Eq, Show)
+
+emptyPseudoRandom :: PseudoRandom a
+emptyPseudoRandom = PseudoRandom V.empty 0
+
+getPseudoValue :: Show a => PseudoRandom a -> (Maybe a, PseudoRandom a)
+getPseudoValue PseudoRandom {..} =
+  let v = pseudoRandomValues V.!? pseudoRandomIndex
+  in (v, PseudoRandom pseudoRandomValues ((pseudoRandomIndex + 1) `mod` V.length pseudoRandomValues))
+
+getPseudoValues :: Show a => Int -> PseudoRandom a -> ([a], PseudoRandom a)
+getPseudoValues count pseudo = bimap catMaybes id $ go [] pseudo count
+  where
+    go :: Show a => [Maybe a] -> PseudoRandom a -> Int -> ([Maybe a], PseudoRandom a)
+    go acc p n
+      | n < 0 = ([], p)
+      | n > 0 = let (v, p') = getPseudoValue p
+                in go (acc ++ [v]) p' (n - 1)
+      | otherwise = (acc, p)
+
 data GameState
   = GameState
   { gameStateRenderer            :: SDL.Renderer
@@ -84,6 +115,7 @@ data GameState
   , gameStateBulletTimer         :: Float
   , gameStateBulletTimerMax      :: Float
   , gameStateBulletAgeMax        :: Int
+  , gameStateRandomValues        :: PseudoRandom Float
   }
   deriving (Eq, Show)
 
