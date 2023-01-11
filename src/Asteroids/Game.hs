@@ -15,10 +15,9 @@ import Foreign.C.Types
 import Linear
 import qualified SDL
 import SDL (($=), WindowConfig (..))
+import System.Random.Mersenne.Pure64
 
 import qualified Asteroids.Linear.Vector as AV
-
-import qualified Debug.Trace as Debug
 
 windowConfig :: WindowConfig
 windowConfig
@@ -78,13 +77,25 @@ data PseudoRandom a
 emptyPseudoRandom :: PseudoRandom a
 emptyPseudoRandom = PseudoRandom V.empty 0
 
-getPseudoValue :: Show a => PseudoRandom a -> (Maybe a, PseudoRandom a)
+generatePseudoFloats :: Int -> IO (PseudoRandom Float)
+generatePseudoFloats num = do
+  gen <- newPureMT
+  let fs = go num [] gen
+      vs = V.fromList fs
+  pure $ PseudoRandom vs 0
+  where
+    go 0 acc _ = acc
+    go n acc g =
+      let (d, nextGen) = randomDouble g
+      in go (n - 1) (realToFrac d : acc) nextGen
+
+getPseudoValue :: PseudoRandom a -> (Maybe a, PseudoRandom a)
 getPseudoValue PseudoRandom {..} =
   let v = pseudoRandomValues V.!? pseudoRandomIndex
   in (v, PseudoRandom pseudoRandomValues ((pseudoRandomIndex + 1) `mod` V.length pseudoRandomValues))
 
 getPseudoValues :: Show a => Int -> PseudoRandom a -> ([a], PseudoRandom a)
-getPseudoValues count pseudo = bimap catMaybes id $ go [] pseudo count
+getPseudoValues count pseudo = first catMaybes $ go [] pseudo count
   where
     go :: Show a => [Maybe a] -> PseudoRandom a -> Int -> ([Maybe a], PseudoRandom a)
     go acc p n
@@ -172,6 +183,7 @@ updateBulletAge state = state
 initGameState :: SDL.Renderer -> IO GameState
 initGameState renderer = do
   currentTime <- SDL.time
+  pseudoRandomFloats <- generatePseudoFloats 40
   pure
     $ GameState
     { gameStateRenderer            = renderer
@@ -194,6 +206,7 @@ initGameState renderer = do
     , gameStateBulletTimer         = 0.0
     , gameStateBulletTimerMax      = 1.0
     , gameStateBulletAgeMax        = 50
+    , gameStateRandomValues        = pseudoRandomFloats
     }
 
 run :: IO ()
