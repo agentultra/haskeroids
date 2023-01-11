@@ -27,6 +27,7 @@ library
   exposed-modules:
       Asteroids.Game
       Asteroids.Linear.Vector
+      Asteroids.List
       Asteroids.Random
   other-modules:
       Paths_Asteroids

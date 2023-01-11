@@ -13,6 +13,7 @@ import qualified SDL
 import SDL (($=), WindowConfig (..))
 
 import qualified Asteroids.Linear.Vector as AV
+import Asteroids.List
 import Asteroids.Random
 
 windowConfig :: WindowConfig
@@ -138,6 +139,25 @@ updateBulletAge state = state
     young :: Bullet -> Bool
     young Bullet {..} =
       (truncate . gameStateTicks $ state) - bulletTick < gameStateBulletAgeMax state
+
+data Asteroid
+  = Asteroid
+  { asteroidPoints   :: [V2 Float]
+  , asteroidPosition :: V2 Float
+  }
+  deriving (Eq, Show)
+
+generateAsteroid :: PseudoRandom Float -> (Asteroid, PseudoRandom Float)
+generateAsteroid gen =
+  let (points, nextGen) = getPseudoValues 6 gen
+      ([x, y], finalGen) = getPseudoValues 2 nextGen
+  in (Asteroid (mkAsteroidPoints points) (V2 x y), finalGen)
+  where
+    mkAsteroidPoints :: [Float] -> [V2 Float]
+    mkAsteroidPoints = map toV2 . pairs
+
+    toV2 :: (Float, Float) -> V2 Float
+    toV2 = uncurry V2
 
 initGameState :: SDL.Renderer -> IO GameState
 initGameState renderer = do
