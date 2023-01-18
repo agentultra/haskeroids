@@ -142,15 +142,21 @@ updateBulletAge state = state
     young Bullet {..} =
       (truncate . gameStateTicks $ state) - bulletTick < gameStateBulletAgeMax state
 
-newtype AsteroidPoints
-  = AsteroidPoints (V2 Float, V2 Float, V2 Float, V2 Float, V2 Float, V2 Float)
+newtype AsteroidPoints a
+  = AsteroidPoints (a, a, a, a, a, a)
   deriving (Eq, Show)
+
+instance Functor AsteroidPoints where
+  fmap f (AsteroidPoints (a, b, c, d, e, f')) =
+    AsteroidPoints (f a, f b, f c, f d, f e, f f')
 
 data Asteroid
   = Asteroid
-  { asteroidPoints   :: AsteroidPoints
-  , asteroidPosition :: V2 Float
-  , asteroidVelocity :: V2 Float
+  { asteroidPoints        :: AsteroidPoints (V2 Float)
+  , asteroidPosition      :: V2 Float
+  , asteroidVelocity      :: V2 Float
+  , asteroidRotation      :: Float
+  , asteroidRotationSpeed :: Float
   }
   deriving (Eq, Show)
 
@@ -158,25 +164,30 @@ updateAsteroid :: Asteroid -> Asteroid
 updateAsteroid a@Asteroid {..} =
   let position = asteroidPosition + asteroidVelocity ^* delta
   in a { asteroidPosition = wrapTorus position 10
+       , asteroidRotation = asteroidRotation + asteroidRotationSpeed * delta
        }
 
 updateAsteroids :: Deque Asteroid ->  Deque Asteroid
 updateAsteroids = fmap updateAsteroid
 
 renderAsteroid :: Asteroid -> SDL.Renderer -> IO ()
-renderAsteroid (Asteroid points position _) renderer = do
+renderAsteroid Asteroid {..} renderer = do
       SDL.drawLines renderer
         . VS.fromList
-        . translatePoints position
-        . asteroidPoints
-        $ points
+        . rotatePoints asteroidPosition
+        . translatePoints asteroidPosition
+        . asteroidPointsToList
+        $ asteroidPoints
         where
-          asteroidPoints :: AsteroidPoints -> [V2 Float]
-          asteroidPoints (AsteroidPoints (p1, p2, p3, p4, p5, p6))
+          asteroidPointsToList :: AsteroidPoints (V2 Float) -> [V2 Float]
+          asteroidPointsToList (AsteroidPoints (p1, p2, p3, p4, p5, p6))
             = [p1, p2, p3, p4, p5, p6, p1]
           translatePoints :: V2 Float -> [V2 Float] -> [SDL.Point V2 CInt]
           translatePoints (V2 originX originY) ps =
             [ SDL.P (V2 (truncate $ px + originX) (truncate $ py + originY)) | (V2 px py) <- ps ]
+          rotatePoints :: V2 Float -> [SDL.Point V2 CInt] -> [SDL.Point V2 CInt]
+          rotatePoints origin =
+            map (rotateOrigin (truncate <$> origin) asteroidRotation)
 
 renderAsteroids :: Deque Asteroid -> SDL.Renderer -> IO ()
 renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a renderer
@@ -194,7 +205,7 @@ initGameState renderer = do
         , V2 (-10) 8
         , V2 (-20) 0
         )
-      asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2)
+      asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2) 20 0.2
   pure
     $ GameState
     { gameStateRenderer            = renderer
