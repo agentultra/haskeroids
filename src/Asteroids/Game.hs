@@ -140,24 +140,28 @@ updateBulletAge state = state
     young Bullet {..} =
       (truncate . gameStateTicks $ state) - bulletTick < gameStateBulletAgeMax state
 
+newtype AsteroidPoints
+  = AsteroidPoints (V2 Float, V2 Float, V2 Float, V2 Float, V2 Float, V2 Float)
+  deriving (Eq, Show)
+
 data Asteroid
   = Asteroid
-  { asteroidPoints   :: [V2 Float]
+  { asteroidPoints   :: AsteroidPoints
   , asteroidPosition :: V2 Float
   }
   deriving (Eq, Show)
 
-generateAsteroid :: PseudoRandom Float -> (Asteroid, PseudoRandom Float)
-generateAsteroid gen =
-  let (points, nextGen) = getPseudoValues 6 gen
-      ([x, y], finalGen) = getPseudoValues 2 nextGen
-  in (Asteroid (mkAsteroidPoints points) (V2 x y), finalGen)
-  where
-    mkAsteroidPoints :: [Float] -> [V2 Float]
-    mkAsteroidPoints = map toV2 . pairs
+renderAsteroid :: Asteroid -> SDL.Renderer -> IO ()
+renderAsteroid (Asteroid points position) renderer = do
+      SDL.drawLines renderer . VS.fromList . translatePoints position . asteroidPoints $ points
+        where
+          asteroidPoints :: AsteroidPoints -> [V2 Float]
+          asteroidPoints (AsteroidPoints (p1, p2, p3, p4, p5, p6))
+            = [p1, p2, p3, p4, p5, p6, p1]
+          translatePoints :: V2 Float -> [V2 Float] -> [SDL.Point V2 CInt]
+          translatePoints (V2 originX originY) ps =
+            [ SDL.P (V2 (truncate $ px + originX) (truncate $ py + originY)) | (V2 px py) <- ps ]
 
-    toV2 :: (Float, Float) -> V2 Float
-    toV2 = uncurry V2
 
 initGameState :: SDL.Renderer -> IO GameState
 initGameState renderer = do
@@ -325,6 +329,16 @@ render GameState {..} = do
     gameStatePlayerRotation
     gameStateRenderer
   renderBullets gameStateBullets gameStateRenderer
+  let apoints
+        = AsteroidPoints
+        ( V2 (-10) (-10)
+        , V2 8 (-49)
+        , V2 21 11
+        , V2 (-10) 23
+        , V2 (-10) 8
+        , V2 (-20) 0
+        )
+  renderAsteroid (Asteroid apoints (V2 200 200)) gameStateRenderer
   SDL.present gameStateRenderer
 
 renderPlayerShip :: V2 Float -> CInt -> Float -> SDL.Renderer -> IO ()
