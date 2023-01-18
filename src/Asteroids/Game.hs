@@ -8,6 +8,7 @@ import Deque.Strict (Deque)
 import qualified Deque.Strict as D
 import qualified Data.Vector.Storable as VS
 import Foreign.C.Types
+import qualified GHC.Exts as Exts
 import Linear
 import qualified SDL
 import SDL (($=), WindowConfig (..))
@@ -87,6 +88,7 @@ data GameState
   , gameStateBulletTimerMax      :: Float
   , gameStateBulletAgeMax        :: Int
   , gameStateRandomValues        :: PseudoRandom Float
+  , gameStateAsteroids           :: Deque Asteroid
   }
   deriving (Eq, Show)
 
@@ -153,7 +155,11 @@ data Asteroid
 
 renderAsteroid :: Asteroid -> SDL.Renderer -> IO ()
 renderAsteroid (Asteroid points position) renderer = do
-      SDL.drawLines renderer . VS.fromList . translatePoints position . asteroidPoints $ points
+      SDL.drawLines renderer
+        . VS.fromList
+        . translatePoints position
+        . asteroidPoints
+        $ points
         where
           asteroidPoints :: AsteroidPoints -> [V2 Float]
           asteroidPoints (AsteroidPoints (p1, p2, p3, p4, p5, p6))
@@ -162,11 +168,23 @@ renderAsteroid (Asteroid points position) renderer = do
           translatePoints (V2 originX originY) ps =
             [ SDL.P (V2 (truncate $ px + originX) (truncate $ py + originY)) | (V2 px py) <- ps ]
 
+renderAsteroids :: Deque Asteroid -> SDL.Renderer -> IO ()
+renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a renderer
 
 initGameState :: SDL.Renderer -> IO GameState
 initGameState renderer = do
   currentTime <- SDL.time
   pseudoRandomFloats <- generatePseudoFloats 40
+  let apoints
+        = AsteroidPoints
+        ( V2 (-10) (-10)
+        , V2 8 (-49)
+        , V2 21 11
+        , V2 (-10) 23
+        , V2 (-10) 8
+        , V2 (-20) 0
+        )
+      asteroid = Asteroid apoints (V2 200 200)
   pure
     $ GameState
     { gameStateRenderer            = renderer
@@ -190,6 +208,7 @@ initGameState renderer = do
     , gameStateBulletTimerMax      = 1.0
     , gameStateBulletAgeMax        = 50
     , gameStateRandomValues        = pseudoRandomFloats
+    , gameStateAsteroids           = Exts.fromList [asteroid]
     }
 
 run :: IO ()
@@ -329,16 +348,7 @@ render GameState {..} = do
     gameStatePlayerRotation
     gameStateRenderer
   renderBullets gameStateBullets gameStateRenderer
-  let apoints
-        = AsteroidPoints
-        ( V2 (-10) (-10)
-        , V2 8 (-49)
-        , V2 21 11
-        , V2 (-10) 23
-        , V2 (-10) 8
-        , V2 (-20) 0
-        )
-  renderAsteroid (Asteroid apoints (V2 200 200)) gameStateRenderer
+  renderAsteroids gameStateAsteroids gameStateRenderer
   SDL.present gameStateRenderer
 
 renderPlayerShip :: V2 Float -> CInt -> Float -> SDL.Renderer -> IO ()
