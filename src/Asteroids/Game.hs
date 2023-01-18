@@ -150,11 +150,21 @@ data Asteroid
   = Asteroid
   { asteroidPoints   :: AsteroidPoints
   , asteroidPosition :: V2 Float
+  , asteroidVelocity :: V2 Float
   }
   deriving (Eq, Show)
 
+updateAsteroid :: Asteroid -> Asteroid
+updateAsteroid a@Asteroid {..} =
+  let position = asteroidPosition + asteroidVelocity ^* delta
+  in a { asteroidPosition = wrapTorus position 10
+       }
+
+updateAsteroids :: Deque Asteroid ->  Deque Asteroid
+updateAsteroids = fmap updateAsteroid
+
 renderAsteroid :: Asteroid -> SDL.Renderer -> IO ()
-renderAsteroid (Asteroid points position) renderer = do
+renderAsteroid (Asteroid points position _) renderer = do
       SDL.drawLines renderer
         . VS.fromList
         . translatePoints position
@@ -184,7 +194,7 @@ initGameState renderer = do
         , V2 (-10) 8
         , V2 (-20) 0
         )
-      asteroid = Asteroid apoints (V2 200 200)
+      asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2)
   pure
     $ GameState
     { gameStateRenderer            = renderer
@@ -331,6 +341,7 @@ update state@GameState {..} =
                         , gameStatePlayerVelocity = AV.clampVector velocity gameStatePlayerMaxVelocity
                         , gameStateBulletTimer = bulletTimer
                         , gameStateBullets = updateBulletPhysics bullets
+                        , gameStateAsteroids = updateAsteroids gameStateAsteroids
                         }
   in
     if gameStateAccumulator <= delta
