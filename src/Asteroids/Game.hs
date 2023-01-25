@@ -71,17 +71,8 @@ data GameState
   , gameStateTicks               :: Float
   , gameStateCurrentTime         :: Float
   , gameStateAccumulator         :: Float
-  , gameStatePlayerPosition      :: V2 Float
-  , gameStatePlayerSize          :: CInt
-  , gameStatePlayerRotation      :: Float
-  , gameStatePlayerRotationSpeed :: Float
-  , gameStatePlayerThrust        :: Float
-  , gameStatePlayerThrustSpeed   :: Float
-  , gameStatePlayerThrustMax     :: Float
-  , gameStatePlayerAcceleration  :: V2 Float
-  , gameStatePlayerMaxVelocity   :: Float
-  , gameStatePlayerVelocity      :: V2 Float
   , gameStateButtonState         :: ButtonState
+  , gameStatePlayerShip          :: Ship
   , gameStateBullets             :: Deque Bullet
   , gameStateBulletTimer         :: Float
   , gameStateBulletTimerMax      :: Float
@@ -98,6 +89,29 @@ class HasPosition a where
 class HasVelocity a where
   getVelocity :: a -> V2 Float
   setVelocity :: a -> V2 Float -> a
+
+data Ship
+  = Ship
+  { shipPosition      :: V2 Float
+  , shipSize          :: CInt
+  , shipRotation      :: Float
+  , shipRotationSpeed :: Float
+  , shipThrust        :: Float
+  , shipThrustSpeed   :: Float
+  , shipThrustMax     :: Float
+  , shipAcceleration  :: V2 Float
+  , shipMaxVelocity   :: Float
+  , shipVelocity      :: V2 Float
+  }
+  deriving (Eq, Show)
+
+instance HasPosition Ship where
+  getPosition = shipPosition
+  setPosition ship p = ship { shipPosition = p }
+
+instance HasVelocity Ship where
+  getVelocity = shipVelocity
+  setVelocity ship v = ship { shipVelocity = v }
 
 maxBullets :: Int
 maxBullets = 15
@@ -216,6 +230,18 @@ initGameState :: SDL.Renderer -> IO GameState
 initGameState renderer = do
   currentTime <- SDL.time
   pseudoRandomFloats <- generatePseudoFloats 40
+  let initPlayerShip = Ship
+        { shipPosition      = V2 20 20
+        , shipSize          = 20
+        , shipRotation      = 0.0
+        , shipRotationSpeed = 0.1
+        , shipThrust        = 0.0
+        , shipThrustSpeed   = 0.2
+        , shipThrustMax     = 3.0
+        , shipAcceleration  = V2 0.0 0.0
+        , shipMaxVelocity   = 49.0
+        , shipVelocity = V2 0.0 0.0
+        }
   let apoints
         = AsteroidPoints
         ( V2 (-10) (-10)
@@ -228,28 +254,19 @@ initGameState renderer = do
       asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2) 20 0.2
   pure
     $ GameState
-    { gameStateRenderer            = renderer
-    , gameStateFps                 = 0.0
-    , gameStateTicks               = 0.0
-    , gameStateCurrentTime         = currentTime
-    , gameStateAccumulator         = 0.0
-    , gameStatePlayerPosition      = V2 20 20
-    , gameStatePlayerSize          = 20
-    , gameStatePlayerRotation      = 0.0
-    , gameStatePlayerRotationSpeed = 0.1
-    , gameStatePlayerThrust        = 0.0
-    , gameStatePlayerThrustSpeed   = 0.2
-    , gameStatePlayerThrustMax     = 3.0
-    , gameStatePlayerAcceleration  = V2 0.0 0.0
-    , gameStatePlayerMaxVelocity   = 49.0
-    , gameStateButtonState         = initButtonState
-    , gameStatePlayerVelocity      = V2 0.0 0.0
-    , gameStateBullets             = mempty
-    , gameStateBulletTimer         = 0.0
-    , gameStateBulletTimerMax      = 1.0
-    , gameStateBulletAgeMax        = 50
-    , gameStateRandomValues        = pseudoRandomFloats
-    , gameStateAsteroids           = Exts.fromList [asteroid]
+    { gameStateRenderer       = renderer
+    , gameStateFps            = 0.0
+    , gameStateTicks          = 0.0
+    , gameStateCurrentTime    = currentTime
+    , gameStateAccumulator    = 0.0
+    , gameStatePlayerShip     = initPlayerShip
+    , gameStateButtonState    = initButtonState
+    , gameStateBullets        = mempty
+    , gameStateBulletTimer    = 0.0
+    , gameStateBulletTimerMax = 1.0
+    , gameStateBulletAgeMax   = 50
+    , gameStateRandomValues   = pseudoRandomFloats
+    , gameStateAsteroids      = Exts.fromList [asteroid]
     }
 
 run :: IO ()
@@ -330,46 +347,52 @@ loop state@GameState {..} = do
                             }
   render state'
   let state'' = updateBulletAge state'
-  unless qPressed $ loop state'' { gameStatePlayerAcceleration = V2 0.0 0.0 }
+  unless qPressed $ do
+    loop state'' { gameStatePlayerShip = (getShip state'') { shipAcceleration = V2 0.0 0.0 } }
+  where
+    getShip :: GameState -> Ship
+    getShip GameState {..} = gameStatePlayerShip
 
 update :: GameState -> GameState
 update state@GameState {..} =
-  let (V2 ax ay) = gameStatePlayerAcceleration
+  let (V2 ax ay) = shipAcceleration gameStatePlayerShip
       turnAmount
-        | keyDown $ buttonStateLeft gameStateButtonState = -gameStatePlayerRotationSpeed
-        | keyDown $ buttonStateRight gameStateButtonState = gameStatePlayerRotationSpeed
+        | keyDown $ buttonStateLeft gameStateButtonState = -(shipRotationSpeed gameStatePlayerShip)
+        | keyDown $ buttonStateRight gameStateButtonState = shipRotationSpeed gameStatePlayerShip
         | otherwise = 0.0
       thrust
         | keyDown $ buttonStateUp gameStateButtonState =
           min
-          (gameStatePlayerThrust + gameStatePlayerThrustSpeed)
-          gameStatePlayerThrustMax
+          (shipThrust gameStatePlayerShip + shipThrustSpeed gameStatePlayerShip)
+          (shipThrustMax gameStatePlayerShip)
         | otherwise = 0.0
       acceleration
         | keyDown $ buttonStateUp gameStateButtonState
         = V2
-          (ax + thrust * cos gameStatePlayerRotation)
-          (ay + thrust * sin gameStatePlayerRotation)
-        | otherwise = gameStatePlayerAcceleration
-      position = gameStatePlayerPosition + gameStatePlayerVelocity ^* delta
-      velocity = gameStatePlayerVelocity + acceleration ^* delta
+          (ax + thrust * cos (shipRotation gameStatePlayerShip))
+          (ay + thrust * sin (shipRotation gameStatePlayerShip))
+        | otherwise = shipAcceleration gameStatePlayerShip
+      position = shipPosition gameStatePlayerShip + shipVelocity gameStatePlayerShip ^* delta
+      velocity = shipVelocity gameStatePlayerShip + acceleration ^* delta
       bulletTimer
         | keyDown (buttonStateFire gameStateButtonState) && (gameStateBulletTimer + delta < gameStateBulletTimerMax) = gameStateBulletTimer + delta
         | otherwise = 0.0
       bullets = if keyDown (buttonStateFire gameStateButtonState) && (bulletTimer == 0)
         then fireBullet
-             gameStatePlayerPosition
-             gameStatePlayerRotation
+             (shipPosition gameStatePlayerShip)
+             (shipRotation gameStatePlayerShip)
              (truncate gameStateTicks)
              gameStateBullets
         else gameStateBullets
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
-                        , gameStatePlayerPosition = wrapTorus position (fromIntegral gameStatePlayerSize)
-                        , gameStatePlayerRotation = gameStatePlayerRotation + turnAmount
-                        , gameStatePlayerThrust = thrust
-                        , gameStatePlayerAcceleration = acceleration
-                        , gameStatePlayerVelocity = AV.clampVector velocity gameStatePlayerMaxVelocity
+                        , gameStatePlayerShip = gameStatePlayerShip
+                          { shipPosition = wrapTorus position (fromIntegral $ shipSize gameStatePlayerShip)
+                          , shipRotation = shipRotation gameStatePlayerShip + turnAmount
+                          , shipThrust = thrust
+                          , shipAcceleration = acceleration
+                          , shipVelocity = AV.clampVector velocity $ shipMaxVelocity gameStatePlayerShip
+                          }
                         , gameStateBulletTimer = bulletTimer
                         , gameStateBullets = updateBulletPhysics bullets
                         , gameStateAsteroids = updateAsteroids gameStateAsteroids
@@ -385,20 +408,18 @@ render GameState {..} = do
   SDL.clear gameStateRenderer
 
   renderPlayerShip
-    gameStatePlayerPosition
-    gameStatePlayerSize
-    gameStatePlayerRotation
+    gameStatePlayerShip
     gameStateRenderer
   renderBullets gameStateBullets gameStateRenderer
   renderAsteroids gameStateAsteroids gameStateRenderer
   SDL.present gameStateRenderer
 
-renderPlayerShip :: V2 Float -> CInt -> Float -> SDL.Renderer -> IO ()
-renderPlayerShip position size rotation renderer = do
+renderPlayerShip :: Ship -> SDL.Renderer -> IO ()
+renderPlayerShip Ship {..} renderer = do
   SDL.rendererDrawColor renderer $= V4 0 255 0 255
   let shipPoints
-        = VS.map (rotateOrigin (truncate <$> position) rotation)
-        . playerShipPoints (truncate <$> position) $ size
+        = VS.map (rotateOrigin (truncate <$> shipPosition) shipRotation)
+        . playerShipPoints (truncate <$> shipPosition) $ shipSize
   SDL.drawLines renderer shipPoints
 
 playerShipPoints :: V2 CInt -> CInt -> VS.Vector (SDL.Point V2 CInt)
