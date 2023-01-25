@@ -14,7 +14,6 @@ import qualified SDL
 import SDL (($=), WindowConfig (..))
 
 import qualified Asteroids.Linear.Vector as AV
-import Asteroids.List
 import Asteroids.Random
 
 windowConfig :: WindowConfig
@@ -92,6 +91,14 @@ data GameState
   }
   deriving (Eq, Show)
 
+class HasPosition a where
+  getPosition :: a -> V2 Float
+  setPosition :: a -> V2 Float -> a
+
+class HasVelocity a where
+  getVelocity :: a -> V2 Float
+  setVelocity :: a -> V2 Float -> a
+
 maxBullets :: Int
 maxBullets = 15
 
@@ -102,6 +109,19 @@ data Bullet
   , bulletTick         :: Int
   }
   deriving (Eq, Show)
+
+instance HasPosition Bullet where
+  getPosition = bulletPosition
+  setPosition bullet p = bullet { bulletPosition = p }
+
+instance HasVelocity Bullet where
+  getVelocity = bulletVelocity
+  setVelocity bullet v = bullet { bulletVelocity = v }
+
+updatePosition :: (HasPosition a, HasVelocity a) => a -> Float -> a
+updatePosition object dt =
+  let position = getPosition object + getVelocity object ^* dt
+  in setPosition object (wrapTorus position 10)
 
 fireBullet
   :: V2 Float
@@ -125,13 +145,7 @@ fireBullet pos@(V2 px py) rot t bullets =
   in D.take maxBullets bullets'
 
 updateBulletPhysics :: Deque Bullet -> Deque Bullet
-updateBulletPhysics = fmap updateBullet
-  where
-    updateBullet :: Bullet -> Bullet
-    updateBullet b@Bullet {..} =
-      let position = bulletPosition + bulletVelocity ^* delta
-      in b { bulletPosition = wrapTorus position 10
-           }
+updateBulletPhysics = fmap (`updatePosition` delta)
 
 updateBulletAge :: GameState -> GameState
 updateBulletAge state = state
@@ -160,12 +174,18 @@ data Asteroid
   }
   deriving (Eq, Show)
 
+instance HasPosition Asteroid where
+  getPosition = asteroidPosition
+  setPosition asteroid p = asteroid { asteroidPosition = p }
+
+instance HasVelocity Asteroid where
+  getVelocity = asteroidVelocity
+  setVelocity asteroid v = asteroid { asteroidVelocity = v }
+
 updateAsteroid :: Asteroid -> Asteroid
 updateAsteroid a@Asteroid {..} =
-  let position = asteroidPosition + asteroidVelocity ^* delta
-  in a { asteroidPosition = wrapTorus position 10
-       , asteroidRotation = asteroidRotation + asteroidRotationSpeed * delta
-       }
+  let asteroid = updatePosition a delta
+  in asteroid { asteroidRotation = asteroidRotation + asteroidRotationSpeed * delta }
 
 updateAsteroids :: Deque Asteroid ->  Deque Asteroid
 updateAsteroids = fmap updateAsteroid
@@ -413,6 +433,8 @@ isKeyboardKey event keyState keyCode =
       SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == keyCode
     _ -> False
 
+-- | Wrap an object position around the edges of the screen. `size` is
+-- the boundary over the edge of the screen.
 wrapTorus :: V2 Float -> Int -> V2 Float
 wrapTorus (V2 px py) size = V2 (wrapX px size) (wrapY py size)
   where
