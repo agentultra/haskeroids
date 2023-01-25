@@ -372,7 +372,6 @@ update state@GameState {..} =
           (ax + thrust * cos (shipRotation gameStatePlayerShip))
           (ay + thrust * sin (shipRotation gameStatePlayerShip))
         | otherwise = shipAcceleration gameStatePlayerShip
-      position = shipPosition gameStatePlayerShip + shipVelocity gameStatePlayerShip ^* delta
       velocity = shipVelocity gameStatePlayerShip + acceleration ^* delta
       bulletTimer
         | keyDown (buttonStateFire gameStateButtonState) && (gameStateBulletTimer + delta < gameStateBulletTimerMax) = gameStateBulletTimer + delta
@@ -384,11 +383,11 @@ update state@GameState {..} =
              (truncate gameStateTicks)
              gameStateBullets
         else gameStateBullets
+      ship = updatePosition gameStatePlayerShip delta
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
-                        , gameStatePlayerShip = gameStatePlayerShip
-                          { shipPosition = wrapTorus position (fromIntegral $ shipSize gameStatePlayerShip)
-                          , shipRotation = shipRotation gameStatePlayerShip + turnAmount
+                        , gameStatePlayerShip = ship
+                          { shipRotation = shipRotation gameStatePlayerShip + turnAmount
                           , shipThrust = thrust
                           , shipAcceleration = acceleration
                           , shipVelocity = AV.clampVector velocity $ shipMaxVelocity gameStatePlayerShip
