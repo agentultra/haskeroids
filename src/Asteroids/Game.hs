@@ -1,9 +1,11 @@
+{-# LANGUAGE DataKinds#-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Asteroids.Game where
 
 import Control.Monad (forM_, unless)
+import Data.Foldable
 import Deque.Strict (Deque)
 import qualified Deque.Strict as D
 import qualified Data.Vector.Storable as VS
@@ -82,6 +84,24 @@ data GameState
   }
   deriving (Eq, Show)
 
+data CollisionBox
+  = CollisionBox
+  { collisionBoxPosition :: V2 Float
+  , collisionBoxSize     :: V2 Float
+  }
+  deriving (Eq, Show)
+
+isCollidingBox :: CollisionBox -> CollisionBox -> Bool
+isCollidingBox box other =
+  let (V2 boxX boxY) = collisionBoxPosition box
+      (V2 otherX otherY) = collisionBoxPosition other
+      (V2 boxW boxH) = collisionBoxSize box
+      (V2 otherW otherH) = collisionBoxSize other
+  in overLap boxX boxW otherX otherW
+     && overLap boxY boxH otherY otherH
+  where
+    overLap x xw y yw = x + xw >= y && x <= y + yw
+
 class HasPosition a where
   getPosition :: a -> V2 Float
   setPosition :: a -> V2 Float -> a
@@ -89,6 +109,9 @@ class HasPosition a where
 class HasVelocity a where
   getVelocity :: a -> V2 Float
   setVelocity :: a -> V2 Float -> a
+
+class HasCollisionBox a where
+  getCollisionBox :: a -> CollisionBox
 
 data Ship
   = Ship
@@ -118,9 +141,10 @@ maxBullets = 15
 
 data Bullet
   = Bullet
-  { bulletPosition     :: V2 Float
-  , bulletVelocity     :: V2 Float
-  , bulletTick         :: Int
+  { bulletPosition :: V2 Float
+  , bulletVelocity :: V2 Float
+  , bulletTick     :: Int
+  , bulletIsDead   :: Bool
   }
   deriving (Eq, Show)
 
@@ -131,6 +155,10 @@ instance HasPosition Bullet where
 instance HasVelocity Bullet where
   getVelocity = bulletVelocity
   setVelocity bullet v = bullet { bulletVelocity = v }
+
+instance HasCollisionBox Bullet where
+  getCollisionBox Bullet {..} =
+    CollisionBox bulletPosition (V2 10 10)
 
 updatePosition :: (HasPosition a, HasVelocity a) => a -> Float -> a
 updatePosition object dt =
@@ -154,6 +182,7 @@ fireBullet pos@(V2 px py) rot t bullets =
         -- the unit vector * magnitude scalar
         , bulletVelocity = (bdir ^/ AV.length bdir) * 70
         , bulletTick  = t
+        , bulletIsDead = False
         }
       bullets' = bullet `D.cons` bullets
   in D.take maxBullets bullets'
@@ -178,6 +207,9 @@ instance Functor AsteroidPoints where
   fmap f (AsteroidPoints (a, b, c, d, e, f')) =
     AsteroidPoints (f a, f b, f c, f d, f e, f f')
 
+maxAsteroids :: Int
+maxAsteroids = 10
+
 data Asteroid
   = Asteroid
   { asteroidPoints        :: AsteroidPoints (V2 Float)
@@ -185,6 +217,7 @@ data Asteroid
   , asteroidVelocity      :: V2 Float
   , asteroidRotation      :: Float
   , asteroidRotationSpeed :: Float
+  , asteroidIsDead        :: Bool
   }
   deriving (Eq, Show)
 
@@ -196,6 +229,12 @@ instance HasVelocity Asteroid where
   getVelocity = asteroidVelocity
   setVelocity asteroid v = asteroid { asteroidVelocity = v }
 
+instance HasCollisionBox Asteroid where
+  getCollisionBox Asteroid {..} =
+    CollisionBox (offsetPosition <$> asteroidPosition) (V2 40 50)
+    where
+      offsetPosition x = x - 20
+
 updateAsteroid :: Asteroid -> Asteroid
 updateAsteroid a@Asteroid {..} =
   let asteroid = updatePosition a delta
@@ -205,23 +244,28 @@ updateAsteroids :: Deque Asteroid ->  Deque Asteroid
 updateAsteroids = fmap updateAsteroid
 
 renderAsteroid :: Asteroid -> SDL.Renderer -> IO ()
-renderAsteroid Asteroid {..} renderer = do
-      SDL.drawLines renderer
-        . VS.fromList
-        . rotatePoints asteroidPosition
-        . translatePoints asteroidPosition
-        . asteroidPointsToList
-        $ asteroidPoints
-        where
-          asteroidPointsToList :: AsteroidPoints (V2 Float) -> [V2 Float]
-          asteroidPointsToList (AsteroidPoints (p1, p2, p3, p4, p5, p6))
-            = [p1, p2, p3, p4, p5, p6, p1]
-          translatePoints :: V2 Float -> [V2 Float] -> [SDL.Point V2 CInt]
-          translatePoints (V2 originX originY) ps =
-            [ SDL.P (V2 (truncate $ px + originX) (truncate $ py + originY)) | (V2 px py) <- ps ]
-          rotatePoints :: V2 Float -> [SDL.Point V2 CInt] -> [SDL.Point V2 CInt]
-          rotatePoints origin =
-            map (rotateOrigin (truncate <$> origin) asteroidRotation)
+renderAsteroid asteroid@Asteroid {..} renderer = do
+  SDL.rendererDrawColor renderer $= V4 150 0 150 255
+  let bbox = getCollisionBox asteroid
+  let ar = SDL.Rectangle (SDL.P (truncate <$> collisionBoxPosition bbox)) (truncate <$> collisionBoxSize bbox)
+  SDL.drawRect renderer (Just ar)
+  SDL.rendererDrawColor renderer $= V4 255 0 0 255
+  SDL.drawLines renderer
+    . VS.fromList
+    . rotatePoints asteroidPosition
+    . translatePoints asteroidPosition
+    . asteroidPointsToList
+    $ asteroidPoints
+    where
+      asteroidPointsToList :: AsteroidPoints (V2 Float) -> [V2 Float]
+      asteroidPointsToList (AsteroidPoints (p1, p2, p3, p4, p5, p6))
+        = [p1, p2, p3, p4, p5, p6, p1]
+      translatePoints :: V2 Float -> [V2 Float] -> [SDL.Point V2 CInt]
+      translatePoints (V2 originX originY) ps =
+        [ SDL.P (V2 (truncate $ px + originX) (truncate $ py + originY)) | (V2 px py) <- ps ]
+      rotatePoints :: V2 Float -> [SDL.Point V2 CInt] -> [SDL.Point V2 CInt]
+      rotatePoints origin =
+        map (rotateOrigin (truncate <$> origin) asteroidRotation)
 
 renderAsteroids :: Deque Asteroid -> SDL.Renderer -> IO ()
 renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a renderer
@@ -251,7 +295,7 @@ initGameState renderer = do
         , V2 (-10) 8
         , V2 (-20) 0
         )
-      asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2) 20 0.2
+      asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2) 20 0.2 False
   pure
     $ GameState
     { gameStateRenderer       = renderer
@@ -383,6 +427,9 @@ update state@GameState {..} =
              (truncate gameStateTicks)
              gameStateBullets
         else gameStateBullets
+      (bs, as) = checkAsteroidCollisions (updateAsteroids gameStateAsteroids) (updateBulletPhysics bullets)
+      remainingBullets = filterDeadBullets bs
+      remainingAsteroids = filterDeadAsteroids as
       ship = updatePosition gameStatePlayerShip delta
       nextState = state { gameStateAccumulator = gameStateAccumulator - delta
                         , gameStateTicks = gameStateTicks + delta
@@ -393,13 +440,46 @@ update state@GameState {..} =
                           , shipVelocity = AV.clampVector velocity $ shipMaxVelocity gameStatePlayerShip
                           }
                         , gameStateBulletTimer = bulletTimer
-                        , gameStateBullets = updateBulletPhysics bullets
-                        , gameStateAsteroids = updateAsteroids gameStateAsteroids
+                        , gameStateBullets = remainingBullets
+                        , gameStateAsteroids = remainingAsteroids
                         }
   in
     if gameStateAccumulator <= delta
     then nextState
     else update nextState
+
+checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> (Deque Bullet, Deque Asteroid)
+checkAsteroidCollisions asteroids = foldl' handleBulletCollision (mempty, asteroids)
+  where
+    handleBulletCollision
+      :: (Deque Bullet, Deque Asteroid)
+      -> Bullet
+      -> (Deque Bullet, Deque Asteroid)
+    handleBulletCollision (bs, as) bullet =
+      let (b, updatedAs) = go (bullet, []) bullet (Exts.toList as)
+      in (D.snoc b bs, Exts.fromList updatedAs)
+
+    go :: (Bullet, [Asteroid]) -> Bullet -> [Asteroid] -> (Bullet, [Asteroid])
+    go (b, accAs) _ [] = (b, accAs)
+    go (accBullet, accAsteroids) b (a:as)
+      | isColliding a b = go ( b { bulletIsDead = True }, a { asteroidIsDead = True } : accAsteroids) b as
+      | otherwise = go (accBullet, a : accAsteroids) b as
+
+    isColliding :: Asteroid -> Bullet -> Bool
+    isColliding a b =
+      let aBox = getCollisionBox a
+          bBox = getCollisionBox b
+      in isCollidingBox aBox bBox
+
+filterDeadBullets :: Deque Bullet -> Deque Bullet
+filterDeadBullets = D.filter isAlive
+  where
+    isAlive Bullet {..} = not bulletIsDead
+
+filterDeadAsteroids :: Deque Asteroid -> Deque Asteroid
+filterDeadAsteroids = D.filter isAlive
+  where
+    isAlive Asteroid {..} = not asteroidIsDead
 
 render :: GameState -> IO ()
 render GameState {..} = do
