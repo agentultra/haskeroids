@@ -4,7 +4,7 @@
 
 module Asteroids.Game where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (unless)
 import Data.Foldable
 import Deque.Strict (Deque)
 import qualified Deque.Strict as D
@@ -68,19 +68,20 @@ initButtonState
 
 data GameState
   = GameState
-  { gameStateRenderer            :: SDL.Renderer
-  , gameStateFps                 :: Float
-  , gameStateTicks               :: Float
-  , gameStateCurrentTime         :: Float
-  , gameStateAccumulator         :: Float
-  , gameStateButtonState         :: ButtonState
-  , gameStatePlayerShip          :: Ship
-  , gameStateBullets             :: Deque Bullet
-  , gameStateBulletTimer         :: Float
-  , gameStateBulletTimerMax      :: Float
-  , gameStateBulletAgeMax        :: Int
-  , gameStateRandomValues        :: PseudoRandom Float
-  , gameStateAsteroids           :: Deque Asteroid
+  { gameStateRenderer       :: SDL.Renderer
+  , gameStateFps            :: Float
+  , gameStateTicks          :: Float
+  , gameStateCurrentTime    :: Float
+  , gameStateAccumulator    :: Float
+  , gameStateButtonState    :: ButtonState
+  , gameStatePlayerShip     :: Ship
+  , gameStateBullets        :: Deque Bullet
+  , gameStateBulletTimer    :: Float
+  , gameStateBulletTimerMax :: Float
+  , gameStateBulletAgeMax   :: Int
+  , gameStateRandomValues   :: PseudoRandom Float
+  , gameStateAsteroids      :: Deque Asteroid
+  , gameStateScore          :: Int
   }
   deriving (Eq, Show)
 
@@ -311,6 +312,7 @@ initGameState renderer = do
     , gameStateBulletAgeMax   = 50
     , gameStateRandomValues   = pseudoRandomFloats
     , gameStateAsteroids      = Exts.fromList [asteroid]
+    , gameStateScore          = 0
     }
 
 run :: IO ()
@@ -427,49 +429,68 @@ update state@GameState {..} =
              (truncate gameStateTicks)
              gameStateBullets
         else gameStateBullets
-      (bs, as) = checkAsteroidCollisions (updateAsteroids gameStateAsteroids) (updateBulletPhysics bullets)
-      remainingBullets = filterDeadBullets bs
-      remainingAsteroids = filterDeadAsteroids as
+      collisions = checkAsteroidCollisions (updateAsteroids gameStateAsteroids) (updateBulletPhysics bullets)
+      state' = handleCollisionResults state [collisions]
       ship = updatePosition gameStatePlayerShip delta
-      nextState = state { gameStateAccumulator = gameStateAccumulator - delta
-                        , gameStateTicks = gameStateTicks + delta
-                        , gameStatePlayerShip = ship
-                          { shipRotation = shipRotation gameStatePlayerShip + turnAmount
-                          , shipThrust = thrust
-                          , shipAcceleration = acceleration
-                          , shipVelocity = AV.clampVector velocity $ shipMaxVelocity gameStatePlayerShip
+      nextState = state' { gameStateAccumulator = gameStateAccumulator - delta
+                         , gameStateTicks = gameStateTicks + delta
+                         , gameStatePlayerShip = ship
+                           { shipRotation = shipRotation gameStatePlayerShip + turnAmount
+                           , shipThrust = thrust
+                           , shipAcceleration = acceleration
+                           , shipVelocity = AV.clampVector velocity $ shipMaxVelocity gameStatePlayerShip
                           }
-                        , gameStateBulletTimer = bulletTimer
-                        , gameStateBullets = remainingBullets
-                        , gameStateAsteroids = remainingAsteroids
-                        }
+                         , gameStateBulletTimer = bulletTimer
+                         }
   in
     if gameStateAccumulator <= delta
     then nextState
     else update nextState
 
-checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> (Deque Bullet, Deque Asteroid)
-checkAsteroidCollisions asteroids = foldl' handleBulletCollision (mempty, asteroids)
+data CollisionResult
+  = BulletAndAsteroidCollisions Int (Deque Bullet) (Deque Asteroid)
+  deriving (Eq, Show)
+
+handleCollisionResults :: GameState -> [CollisionResult] -> GameState
+handleCollisionResults = foldl' handleCollision
+  where
+    handleCollision :: GameState -> CollisionResult -> GameState
+    handleCollision gameState (BulletAndAsteroidCollisions numCols bs as) =
+      gameState
+       { gameStateBullets = filterDeadBullets bs
+       , gameStateAsteroids = filterDeadAsteroids as
+       , gameStateScore = gameStateScore gameState + numCols
+       }
+
+checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> CollisionResult
+checkAsteroidCollisions asteroids bullets =
+  let (bs, as, colNum) = foldl' handleBulletCollision (mempty, asteroids, 0) bullets
+  in BulletAndAsteroidCollisions colNum bs as
   where
     handleBulletCollision
-      :: (Deque Bullet, Deque Asteroid)
+      :: (Deque Bullet, Deque Asteroid, Int)
       -> Bullet
-      -> (Deque Bullet, Deque Asteroid)
-    handleBulletCollision (bs, as) bullet =
-      let (b, updatedAs) = go (bullet, []) bullet (Exts.toList as)
-      in (D.snoc b bs, Exts.fromList updatedAs)
+      -> (Deque Bullet, Deque Asteroid, Int)
+    handleBulletCollision (bs, as, colNum) bullet =
+      let (b, updatedAs, colNum') = go (bullet, [], 0) bullet (Exts.toList as)
+      in (D.snoc b bs, Exts.fromList updatedAs, colNum + colNum')
 
-    go :: (Bullet, [Asteroid]) -> Bullet -> [Asteroid] -> (Bullet, [Asteroid])
-    go (b, accAs) _ [] = (b, accAs)
-    go (accBullet, accAsteroids) b (a:as)
-      | isColliding a b = go ( b { bulletIsDead = True }, a { asteroidIsDead = True } : accAsteroids) b as
-      | otherwise = go (accBullet, a : accAsteroids) b as
+    -- | The state of this recursion is @(Final state of the Input
+    -- Bullet, List of Asteroids that may have dead flag set)@
+    go :: (Bullet, [Asteroid], Int) -> Bullet -> [Asteroid] -> (Bullet, [Asteroid], Int)
+    go (b, accAs, colNum) _ [] = (b, accAs, colNum)
+    go (accBullet, accAsteroids, colNum) b (a:as)
+      | isColliding a b =
+        (b { bulletIsDead = True }, (a { asteroidIsDead = True } : accAsteroids) ++ as, 1)
+      | otherwise = go (accBullet, a : accAsteroids, colNum) b as
 
     isColliding :: Asteroid -> Bullet -> Bool
-    isColliding a b =
-      let aBox = getCollisionBox a
-          bBox = getCollisionBox b
-      in isCollidingBox aBox bBox
+    isColliding a b
+      | asteroidIsDead a || bulletIsDead b = False
+      | otherwise =
+        let aBox = getCollisionBox a
+            bBox = getCollisionBox b
+        in isCollidingBox aBox bBox
 
 filterDeadBullets :: Deque Bullet -> Deque Bullet
 filterDeadBullets = D.filter isAlive
