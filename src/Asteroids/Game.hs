@@ -13,7 +13,9 @@ import Foreign.C.Types
 import qualified GHC.Exts as Exts
 import Linear
 import qualified SDL
+import qualified SDL.Raw.Video as Video
 import SDL (($=), WindowConfig (..))
+import qualified SDL.Font as Font
 
 import qualified Asteroids.Linear.Vector as AV
 import Asteroids.Random
@@ -82,6 +84,7 @@ data GameState
   , gameStateRandomValues   :: PseudoRandom Float
   , gameStateAsteroids      :: Deque Asteroid
   , gameStateScore          :: Int
+  , gameStateFont           :: Font.Font
   }
   deriving (Eq, Show)
 
@@ -271,8 +274,8 @@ renderAsteroid asteroid@Asteroid {..} renderer = do
 renderAsteroids :: Deque Asteroid -> SDL.Renderer -> IO ()
 renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a renderer
 
-initGameState :: SDL.Renderer -> IO GameState
-initGameState renderer = do
+initGameState :: SDL.Renderer -> Font.Font -> IO GameState
+initGameState renderer font = do
   currentTime <- SDL.time
   pseudoRandomFloats <- generatePseudoFloats 40
   let initPlayerShip = Ship
@@ -313,6 +316,7 @@ initGameState renderer = do
     , gameStateRandomValues   = pseudoRandomFloats
     , gameStateAsteroids      = Exts.fromList [asteroid]
     , gameStateScore          = 0
+    , gameStateFont           = font
     }
 
 run :: IO ()
@@ -321,10 +325,13 @@ run = do
 
   window <- SDL.createWindow "Asteroids" windowConfig
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
-  state <- initGameState renderer
+  Font.initialize
+  fNoticia <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 32
+  state <- initGameState renderer fNoticia
 
   loop state
 
+  Font.quit
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
 
@@ -512,6 +519,11 @@ render GameState {..} = do
     gameStateRenderer
   renderBullets gameStateBullets gameStateRenderer
   renderAsteroids gameStateAsteroids gameStateRenderer
+
+  helloSurface <- Font.solid gameStateFont (V4 255 255 255 255) "HELLLOOOOO!!!"
+  helloTex <- SDL.createTextureFromSurface gameStateRenderer helloSurface
+  SDL.copy gameStateRenderer helloTex Nothing (Just $ SDL.Rectangle (SDL.P (V2 10 10)) (V2 100 100))
+
   SDL.present gameStateRenderer
 
 renderPlayerShip :: Ship -> SDL.Renderer -> IO ()

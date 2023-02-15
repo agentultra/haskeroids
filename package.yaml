@@ -25,6 +25,7 @@ dependencies:
 - linear
 - mersenne-random-pure64
 - sdl2
+- sdl2-ttf
 - vector
 
 ghc-options:

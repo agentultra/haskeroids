@@ -1,0 +1,16 @@
+* Bullets [3/3]
+** DONE Update Firing
+   CLOSED: [2022-12-06 Tue 20:58]
+   - when the key press is held and we're ready to fire, find the
+     first inactive bullet or the oldest and initialize it to fire
+** DONE Update Active Bullets [2/2]
+   CLOSED: [2022-12-06 Tue 21:57]
+*** DONE iterate the active bullets and update their positions, timers
+    CLOSED: [2022-12-06 Tue 21:57]
+*** DONE kill any bullets that have timed out
+    CLOSED: [2022-12-06 Tue 21:57]
+** DONE Fix bullet physics
+   CLOSED: [2023-01-31 Tue 20:13]
+* DONE wrapTorus
+  CLOSED: [2023-01-31 Tue 20:13]
+  refactor this out from updatePosition
