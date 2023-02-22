@@ -250,11 +250,7 @@ updateAsteroids :: Deque Asteroid ->  Deque Asteroid
 updateAsteroids = fmap updateAsteroid
 
 renderAsteroid :: Asteroid -> SDL.Renderer -> IO ()
-renderAsteroid asteroid@Asteroid {..} renderer = do
-  SDL.rendererDrawColor renderer $= V4 150 0 150 255
-  let bbox = getCollisionBox asteroid
-  let ar = SDL.Rectangle (SDL.P (truncate <$> collisionBoxPosition bbox)) (truncate <$> collisionBoxSize bbox)
-  SDL.drawRect renderer (Just ar)
+renderAsteroid Asteroid {..} renderer = do
   SDL.rendererDrawColor renderer $= V4 255 0 0 255
   SDL.drawLines renderer
     . VS.fromList
@@ -295,10 +291,10 @@ initGameState renderer font = do
   let apoints
         = AsteroidPoints
         ( V2 (-10) (-10)
-        , V2 8 (-49)
-        , V2 21 11
-        , V2 (-10) 23
-        , V2 (-10) 8
+        , V2 8 (-22)
+        , V2 19 13
+        , V2 (-10) 18
+        , V2 (-18) 8
         , V2 (-20) 0
         )
       asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2) 20 0.2 False
