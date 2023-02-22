@@ -216,6 +216,9 @@ instance Functor AsteroidPoints where
 maxAsteroids :: Int
 maxAsteroids = 10
 
+data AsteroidSize = Big | Small
+  deriving (Eq, Show)
+
 data Asteroid
   = Asteroid
   { asteroidPoints        :: AsteroidPoints (V2 Float)
@@ -224,6 +227,7 @@ data Asteroid
   , asteroidRotation      :: Float
   , asteroidRotationSpeed :: Float
   , asteroidIsDead        :: Bool
+  , asteroidSize          :: AsteroidSize
   }
   deriving (Eq, Show)
 
@@ -237,9 +241,12 @@ instance HasVelocity Asteroid where
 
 instance HasCollisionBox Asteroid where
   getCollisionBox Asteroid {..} =
-    CollisionBox (offsetPosition <$> asteroidPosition) (V2 40 50)
+    case asteroidSize of
+      Small -> CollisionBox (smallOffsetPosition <$> asteroidPosition) (V2 40 50)
+      Big -> CollisionBox (bigOffsetPosition asteroidPosition) (V2 80 60)
     where
-      offsetPosition x = x - 20
+      smallOffsetPosition x = x - 20
+      bigOffsetPosition (V2 x y) = V2 (x - 40) (y - 30)
 
 updateAsteroid :: Asteroid -> Asteroid
 updateAsteroid a@Asteroid {..} =
@@ -288,7 +295,7 @@ initGameState renderer font = do
         , shipMaxVelocity   = 49.0
         , shipVelocity = V2 0.0 0.0
         }
-  let apoints
+  let smallAsteroidPoints
         = AsteroidPoints
         ( V2 (-10) (-10)
         , V2 8 (-22)
@@ -297,7 +304,18 @@ initGameState renderer font = do
         , V2 (-18) 8
         , V2 (-20) 0
         )
-      asteroid = Asteroid apoints (V2 200 200) (V2 1.2 1.2) 20 0.2 False
+      largeAsteroidPoints
+        = AsteroidPoints
+        ( V2 (-20) (-20)
+        , V2 16 (-38)
+        , V2 44 27
+        , V2 (-20) 42
+        , V2 (-38) 18
+        , V2 (-40) 2
+        )
+      smallAsteroid
+        = Asteroid smallAsteroidPoints (V2 200 200) (V2 1.2 1.2) 20 0.2 False Small
+      largeAsteroid = Asteroid largeAsteroidPoints (V2 400 100) (V2 1.2 1.2) 20 0.2 False Big
   pure
     $ GameState
     { gameStateRenderer       = renderer
@@ -312,7 +330,7 @@ initGameState renderer font = do
     , gameStateBulletTimerMax = 1.0
     , gameStateBulletAgeMax   = 50
     , gameStateRandomValues   = pseudoRandomFloats
-    , gameStateAsteroids      = Exts.fromList [asteroid]
+    , gameStateAsteroids      = Exts.fromList [smallAsteroid, largeAsteroid]
     , gameStateScore          = 0
     , gameStateFont           = font
     }
