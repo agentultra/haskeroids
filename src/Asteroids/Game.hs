@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds#-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -248,6 +249,37 @@ instance HasCollisionBox Asteroid where
       smallOffsetPosition x = x - 20
       bigOffsetPosition (V2 x y) = V2 (x - 40) (y - 30)
 
+spawnAsteroid :: AsteroidSize -> V2 Float -> V2 Float -> Float -> Asteroid
+spawnAsteroid size position velocity rotationSpeed
+  = Asteroid
+  { asteroidPoints = asteroidPointsOf size
+  , asteroidPosition = position
+  , asteroidVelocity = velocity
+  , asteroidRotation = 0.0
+  , asteroidRotationSpeed = rotationSpeed
+  , asteroidIsDead = False
+  , asteroidSize = size
+  }
+  where
+    asteroidPointsOf :: AsteroidSize -> AsteroidPoints (V2 Float)
+    asteroidPointsOf = \case
+      Small -> AsteroidPoints
+        ( V2 (-10) (-10)
+        , V2 8 (-22)
+        , V2 19 13
+        , V2 (-10) 18
+        , V2 (-18) 8
+        , V2 (-20) 0
+        )
+      Big -> AsteroidPoints
+        ( V2 (-20) (-20)
+        , V2 16 (-38)
+        , V2 44 27
+        , V2 (-20) 42
+        , V2 (-38) 18
+        , V2 (-40) 2
+        )
+
 updateAsteroid :: Asteroid -> Asteroid
 updateAsteroid a@Asteroid {..} =
   let asteroid = updatePosition a delta
@@ -295,27 +327,8 @@ initGameState renderer font = do
         , shipMaxVelocity   = 49.0
         , shipVelocity = V2 0.0 0.0
         }
-  let smallAsteroidPoints
-        = AsteroidPoints
-        ( V2 (-10) (-10)
-        , V2 8 (-22)
-        , V2 19 13
-        , V2 (-10) 18
-        , V2 (-18) 8
-        , V2 (-20) 0
-        )
-      largeAsteroidPoints
-        = AsteroidPoints
-        ( V2 (-20) (-20)
-        , V2 16 (-38)
-        , V2 44 27
-        , V2 (-20) 42
-        , V2 (-38) 18
-        , V2 (-40) 2
-        )
-      smallAsteroid
-        = Asteroid smallAsteroidPoints (V2 200 200) (V2 1.2 1.2) 20 0.2 False Small
-      largeAsteroid = Asteroid largeAsteroidPoints (V2 400 100) (V2 1.2 1.2) 20 0.2 False Big
+  let smallAsteroid = spawnAsteroid Small (V2 200 200) (V2 1.2 1.2) 0.2
+      largeAsteroid = spawnAsteroid Big (V2 400 100) (V2 1.2 1.2) 0.2
   pure
     $ GameState
     { gameStateRenderer       = renderer
@@ -521,9 +534,19 @@ filterDeadBullets = D.filter isAlive
     isAlive Bullet {..} = not bulletIsDead
 
 filterDeadAsteroids :: Deque Asteroid -> Deque Asteroid
-filterDeadAsteroids = D.filter isAlive
+filterDeadAsteroids = foldl handleAsteroid mempty
   where
     isAlive Asteroid {..} = not asteroidIsDead
+    handleAsteroid :: Deque Asteroid -> Asteroid -> Deque Asteroid
+    handleAsteroid newAsteroids asteroid =
+      case asteroidSize asteroid of
+        Small | isAlive asteroid -> asteroid `D.snoc` newAsteroids
+              | otherwise -> newAsteroids
+        Big | isAlive asteroid -> asteroid `D.snoc` newAsteroids
+            | otherwise ->
+              D.snoc (spawnAsteroid Small ((+ (-10)) <$> asteroidPosition asteroid) (asteroidVelocity asteroid) (asteroidRotationSpeed asteroid))
+              . D.snoc (spawnAsteroid Small ((+ 10) <$> asteroidPosition asteroid) (asteroidVelocity asteroid) (asteroidRotationSpeed asteroid))
+              $ newAsteroids
 
 render :: GameState -> IO ()
 render GameState {..} = do
