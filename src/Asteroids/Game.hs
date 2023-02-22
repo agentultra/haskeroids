@@ -6,6 +6,8 @@ module Asteroids.Game where
 
 import Control.Monad (unless)
 import Data.Foldable
+import Data.Text (Text)
+import qualified Data.Text as T
 import Deque.Strict (Deque)
 import qualified Deque.Strict as D
 import qualified Data.Vector.Storable as VS
@@ -520,11 +522,16 @@ render GameState {..} = do
   renderBullets gameStateBullets gameStateRenderer
   renderAsteroids gameStateAsteroids gameStateRenderer
 
-  helloSurface <- Font.solid gameStateFont (V4 255 255 255 255) "HELLLOOOOO!!!"
-  helloTex <- SDL.createTextureFromSurface gameStateRenderer helloSurface
-  SDL.copy gameStateRenderer helloTex Nothing (Just $ SDL.Rectangle (SDL.P (V2 10 10)) (V2 100 100))
+  renderText (T.pack . show $ gameStateScore) (V2 10 10) gameStateFont gameStateRenderer
 
   SDL.present gameStateRenderer
+
+renderText :: Text -> V2 Int -> Font.Font -> SDL.Renderer -> IO ()
+renderText txt position fnt renderer = do
+  textSurface <- Font.shaded fnt (V4 255 255 255 255) (V4 0 0 0 255) txt
+  textDims <- SDL.surfaceDimensions textSurface
+  textTex <- SDL.createTextureFromSurface renderer textSurface
+  SDL.copy renderer textTex Nothing (Just $ SDL.Rectangle (SDL.P $ fromIntegral <$> position) textDims)
 
 renderPlayerShip :: Ship -> SDL.Renderer -> IO ()
 renderPlayerShip Ship {..} renderer = do

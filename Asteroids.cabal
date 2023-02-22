@@ -41,6 +41,7 @@ library
     , mersenne-random-pure64
     , sdl2
     , sdl2-ttf
+    , text
     , vector
   default-language: Haskell2010
 
@@ -59,6 +60,7 @@ executable asteroids
     , mersenne-random-pure64
     , sdl2
     , sdl2-ttf
+    , text
     , vector
   default-language: Haskell2010
 
@@ -81,5 +83,6 @@ test-suite Asteroids-test
     , quickcheck-classes
     , sdl2
     , sdl2-ttf
+    , text
     , vector
   default-language: Haskell2010
