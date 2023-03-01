@@ -544,8 +544,10 @@ filterDeadAsteroids = foldl handleAsteroid mempty
               | otherwise -> newAsteroids
         Big | isAlive asteroid -> asteroid `D.snoc` newAsteroids
             | otherwise ->
-              D.snoc (spawnAsteroid Small ((+ (-10)) <$> asteroidPosition asteroid) (asteroidVelocity asteroid) (asteroidRotationSpeed asteroid))
-              . D.snoc (spawnAsteroid Small ((+ 10) <$> asteroidPosition asteroid) (asteroidVelocity asteroid) (asteroidRotationSpeed asteroid))
+              D.snoc (spawnAsteroid Small ((+ (-30)) <$> asteroidPosition asteroid) (V2 (-0.8485288306602362) (-0.8485274441869115)) (asteroidRotationSpeed asteroid))
+              . D.snoc (spawnAsteroid Small ((+ 30) <$> asteroidPosition asteroid) (V2 0.8485282760711782 0.8485279987765132) (asteroidRotationSpeed asteroid))
+              . D.snoc (spawnAsteroid Small ((\(V2 x y) -> V2 (x + 30) (y - 30)) $ asteroidPosition asteroid) (V2 0.8485305610016184 (-0.8485257138391733)) (asteroidRotationSpeed asteroid))
+              . D.snoc (spawnAsteroid Small ((\(V2 x y) -> V2 (x - 30) (y + 30)) $ asteroidPosition asteroid) (V2 (-0.8485243273607558) 0.8485319474698503) (asteroidRotationSpeed asteroid))
               $ newAsteroids
 
 render :: GameState -> IO ()
