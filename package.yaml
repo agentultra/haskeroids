@@ -24,6 +24,7 @@ dependencies:
 - deque
 - linear
 - mersenne-random-pure64
+- random
 - sdl2
 - sdl2-ttf
 - text

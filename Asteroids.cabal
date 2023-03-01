@@ -38,6 +38,7 @@ library
     , deque
     , linear
     , mersenne-random-pure64
+    , random
     , sdl2
     , sdl2-ttf
     , text
@@ -57,6 +58,7 @@ executable asteroids
     , deque
     , linear
     , mersenne-random-pure64
+    , random
     , sdl2
     , sdl2-ttf
     , text
@@ -80,6 +82,7 @@ test-suite Asteroids-test
     , linear
     , mersenne-random-pure64
     , quickcheck-classes
+    , random
     , sdl2
     , sdl2-ttf
     , text
