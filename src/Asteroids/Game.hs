@@ -21,7 +21,6 @@ import SDL (($=), WindowConfig (..))
 import qualified SDL.Font as Font
 
 import qualified Asteroids.Linear.Vector as AV
-import Asteroids.Random
 
 windowConfig :: WindowConfig
 windowConfig
@@ -84,7 +83,6 @@ data GameState
   , gameStateBulletTimer    :: Float
   , gameStateBulletTimerMax :: Float
   , gameStateBulletAgeMax   :: Int
-  , gameStateRandomValues   :: PseudoRandom Float
   , gameStateAsteroids      :: Deque Asteroid
   , gameStateScore          :: Int
   , gameStateFont           :: Font.Font
@@ -314,7 +312,6 @@ renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a re
 initGameState :: SDL.Renderer -> Font.Font -> IO GameState
 initGameState renderer font = do
   currentTime <- SDL.time
-  pseudoRandomFloats <- generatePseudoFloats 40
   let initPlayerShip = Ship
         { shipPosition      = V2 20 20
         , shipSize          = 20
@@ -342,7 +339,6 @@ initGameState renderer font = do
     , gameStateBulletTimer    = 0.0
     , gameStateBulletTimerMax = 1.0
     , gameStateBulletAgeMax   = 50
-    , gameStateRandomValues   = pseudoRandomFloats
     , gameStateAsteroids      = Exts.fromList [smallAsteroid, largeAsteroid]
     , gameStateScore          = 0
     , gameStateFont           = font

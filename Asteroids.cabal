@@ -28,7 +28,6 @@ library
       Asteroids.Game
       Asteroids.Linear.Vector
       Asteroids.List
-      Asteroids.Random
   other-modules:
       Paths_Asteroids
   hs-source-dirs:
