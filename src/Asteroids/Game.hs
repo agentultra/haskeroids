@@ -569,6 +569,8 @@ renderText txt position fnt renderer = do
   textDims <- SDL.surfaceDimensions textSurface
   textTex <- SDL.createTextureFromSurface renderer textSurface
   SDL.copy renderer textTex Nothing (Just $ SDL.Rectangle (SDL.P $ fromIntegral <$> position) textDims)
+  SDL.destroyTexture textTex
+  SDL.freeSurface textSurface
 
 renderPlayerShip :: Ship -> SDL.Renderer -> IO ()
 renderPlayerShip Ship {..} renderer = do
