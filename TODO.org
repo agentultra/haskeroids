@@ -14,3 +14,11 @@
 * DONE wrapTorus
   CLOSED: [2023-01-31 Tue 20:13]
   refactor this out from updatePosition
+* TODO Random Asteroid Spawning [0/2]
+** TODO Spawning Off Screen
+** TODO Special Casing Collisions with Bullets
+   :LOGBOOK:
+   - Note taken on [2023-02-28 Tue 21:38] \\
+     When a bullet is outside of the play area, it shouldn't count towards
+     collisions.
+   :END:

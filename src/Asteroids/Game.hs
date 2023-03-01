@@ -19,6 +19,7 @@ import qualified SDL
 import qualified SDL.Raw.Video as Video
 import SDL (($=), WindowConfig (..))
 import qualified SDL.Font as Font
+import System.Random
 
 import qualified Asteroids.Linear.Vector as AV
 
@@ -32,6 +33,12 @@ windowConfig
 
 delta :: Float
 delta = 0.1
+
+playFieldWidth :: Int
+playFieldWidth = 800
+
+playFieldHeight :: Int
+playFieldHeight = 600
 
 data KeyState = KeyDown | KeyRelease
   deriving (Eq, Show)
@@ -86,6 +93,7 @@ data GameState
   , gameStateAsteroids      :: Deque Asteroid
   , gameStateScore          :: Int
   , gameStateFont           :: Font.Font
+  , gameStateRandGen        :: StdGen
   }
   deriving (Eq, Show)
 
@@ -309,6 +317,19 @@ renderAsteroid Asteroid {..} renderer = do
 renderAsteroids :: Deque Asteroid -> SDL.Renderer -> IO ()
 renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a renderer
 
+spawnRandomAsteroid :: GameState -> GameState
+spawnRandomAsteroid gameState
+  | ((truncate $ gameStateCurrentTime gameState) `mod` 1000) == 0 =
+    let randGen = gameStateRandGen gameState
+        asteroids = gameStateAsteroids gameState
+        (aPosX, randGen') = uniformR (-30, playFieldWidth + 30) randGen
+        (aPosY, randGen'') = uniformR (-30, playFieldHeight + 30) randGen'
+        asteroid = spawnAsteroid Small (V2 (fromIntegral $ aPosX `mod` 359) (fromIntegral $ aPosY `mod` 359)) (V2 1.2 1.2) 0.2
+    in gameState { gameStateAsteroids = D.snoc asteroid asteroids
+                 , gameStateRandGen = randGen''
+                 }
+  | otherwise = gameState
+
 initGameState :: SDL.Renderer -> Font.Font -> IO GameState
 initGameState renderer font = do
   currentTime <- SDL.time
@@ -324,8 +345,9 @@ initGameState renderer font = do
         , shipMaxVelocity   = 49.0
         , shipVelocity = V2 0.0 0.0
         }
-  let smallAsteroid = spawnAsteroid Small (V2 200 200) (V2 1.2 1.2) 0.2
+      smallAsteroid = spawnAsteroid Small (V2 200 200) (V2 1.2 1.2) 0.2
       largeAsteroid = spawnAsteroid Big (V2 400 100) (V2 1.2 1.2) 0.2
+      randGen = mkStdGen $ floor currentTime
   pure
     $ GameState
     { gameStateRenderer       = renderer
@@ -342,6 +364,7 @@ initGameState renderer font = do
     , gameStateAsteroids      = Exts.fromList [smallAsteroid, largeAsteroid]
     , gameStateScore          = 0
     , gameStateFont           = font
+    , gameStateRandGen        = randGen
     }
 
 run :: IO ()
@@ -424,7 +447,7 @@ loop state@GameState {..} = do
                             , gameStateFps         = fps
                             }
   render state'
-  let state'' = updateBulletAge state'
+  let state'' = spawnRandomAsteroid . updateBulletAge $ state'
   unless qPressed $ do
     loop state'' { gameStatePlayerShip = (getShip state'') { shipAcceleration = V2 0.0 0.0 } }
   where
