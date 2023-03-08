@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Asteroids.Game where
 
@@ -319,14 +320,25 @@ renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a re
 
 spawnRandomAsteroid :: GameState -> GameState
 spawnRandomAsteroid gameState
-  | ((truncate $ gameStateCurrentTime gameState) `mod` 1000) == 0 =
+  | ((< maxAsteroids) . length . Exts.toList $ gameStateAsteroids gameState) && truncate (gameStateCurrentTime gameState) `mod` (20 :: Integer) == 0 =
     let randGen = gameStateRandGen gameState
         asteroids = gameStateAsteroids gameState
-        (aPosX, randGen') = uniformR (-30, playFieldWidth + 30) randGen
-        (aPosY, randGen'') = uniformR (-30, playFieldHeight + 30) randGen'
-        asteroid = spawnAsteroid Small (V2 (fromIntegral $ aPosX `mod` 359) (fromIntegral $ aPosY `mod` 359)) (V2 1.2 1.2) 0.2
+        -- 0: spawn from sides, 1: spawn from top
+        (spawnSide, randGen') = uniformR (0, 1 :: Int) randGen
+        (aPosX, randGen'')
+            | spawnSide == 0 = uniformR (-70, 0 :: Int) randGen'
+            | spawnSide == 1 = uniformR (-70, playFieldWidth + 70) randGen'
+            | otherwise      =  error "Not possible"
+        (aPosY, randGen''')
+            | spawnSide == 0 = uniformR (-70, playFieldHeight + 70) randGen''
+            | spawnSide == 1 = uniformR (-70, 0 :: Int) randGen''
+            | otherwise      = error "Not possible"
+        asteroidP = V2 (fromIntegral aPosX) (fromIntegral aPosY)
+        asteroidV = asteroidP ^-^ V2 (fromIntegral $ playFieldWidth `div` 2) (fromIntegral $ playFieldHeight `div` 2)
+        asteroidV' = asteroidV ^/ fromIntegral (length asteroidV) ^* 0.009
+        asteroid = spawnAsteroid Big asteroidP asteroidV' 0.2
     in gameState { gameStateAsteroids = D.snoc asteroid asteroids
-                 , gameStateRandGen = randGen''
+                 , gameStateRandGen = randGen'''
                  }
   | otherwise = gameState
 
