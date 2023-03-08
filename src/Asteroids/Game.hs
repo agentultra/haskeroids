@@ -522,11 +522,13 @@ handleCollisionResults = foldl' handleCollision
   where
     handleCollision :: GameState -> CollisionResult -> GameState
     handleCollision gameState (BulletAndAsteroidCollisions numCols bs as) =
-      gameState
-       { gameStateBullets = filterDeadBullets bs
-       , gameStateAsteroids = filterDeadAsteroids as
-       , gameStateScore = gameStateScore gameState + numCols
-       }
+      let (randVelocityScale, randGen) = uniformR (2.0, 3.0) $ gameStateRandGen gameState
+      in gameState
+         { gameStateBullets = filterDeadBullets bs
+         , gameStateAsteroids = filterDeadAsteroids randVelocityScale as
+         , gameStateScore = gameStateScore gameState + numCols
+         , gameStateRandGen = randGen
+         }
 
 checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> CollisionResult
 checkAsteroidCollisions asteroids bullets =
@@ -563,8 +565,8 @@ filterDeadBullets = D.filter isAlive
   where
     isAlive Bullet {..} = not bulletIsDead
 
-filterDeadAsteroids :: Deque Asteroid -> Deque Asteroid
-filterDeadAsteroids = foldl handleAsteroid mempty
+filterDeadAsteroids :: Float -> Deque Asteroid -> Deque Asteroid
+filterDeadAsteroids spawnedAsteroidVelocityScale = foldl handleAsteroid mempty
   where
     isAlive Asteroid {..} = not asteroidIsDead
     handleAsteroid :: Deque Asteroid -> Asteroid -> Deque Asteroid
@@ -574,10 +576,10 @@ filterDeadAsteroids = foldl handleAsteroid mempty
               | otherwise -> newAsteroids
         Big | isAlive asteroid -> asteroid `D.snoc` newAsteroids
             | otherwise ->
-              let topLeftV = V2 (-0.8485288306602362) (-0.8485274441869115) ^* 2.4
-                  bottomRightV = V2 0.8485282760711782 0.8485279987765132 ^* 2.4
-                  topRightV = V2 0.8485305610016184 (-0.8485257138391733) ^* 2.4
-                  bottomLeftV = V2 (-0.8485243273607558) 0.8485319474698503 ^* 2.4
+              let topLeftV = V2 (-0.8485288306602362) (-0.8485274441869115) ^* spawnedAsteroidVelocityScale
+                  bottomRightV = V2 0.8485282760711782 0.8485279987765132 ^* spawnedAsteroidVelocityScale
+                  topRightV = V2 0.8485305610016184 (-0.8485257138391733) ^* spawnedAsteroidVelocityScale
+                  bottomLeftV = V2 (-0.8485243273607558) 0.8485319474698503 ^* spawnedAsteroidVelocityScale
               in D.snoc (spawnAsteroid Small ((+ (-30)) <$> asteroidPosition asteroid) topLeftV (asteroidRotationSpeed asteroid))
                  . D.snoc (spawnAsteroid Small ((+ 30) <$> asteroidPosition asteroid) bottomRightV (asteroidRotationSpeed asteroid))
                  . D.snoc (spawnAsteroid Small ((\(V2 x y) -> V2 (x + 30) (y - 30)) $ asteroidPosition asteroid) topRightV (asteroidRotationSpeed asteroid))
