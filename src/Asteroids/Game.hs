@@ -34,6 +34,18 @@ windowConfig
 delta :: Float
 delta = 0.1
 
+topLeftV :: V2 Float
+topLeftV = V2 (-0.8485288306602362) (-0.8485274441869115)
+
+bottomRightV :: V2 Float
+bottomRightV = V2 0.8485282760711782 0.8485279987765132
+
+topRightV :: V2 Float
+topRightV = V2 0.8485305610016184 (-0.8485257138391733)
+
+bottomLeftV :: V2 Float
+bottomLeftV = V2 (-0.8485243273607558) 0.8485319474698503
+
 playFieldWidth :: Int
 playFieldWidth = 800
 
@@ -576,14 +588,14 @@ filterDeadAsteroids spawnedAsteroidVelocityScale = foldl handleAsteroid mempty
               | otherwise -> newAsteroids
         Big | isAlive asteroid -> asteroid `D.snoc` newAsteroids
             | otherwise ->
-              let topLeftV = V2 (-0.8485288306602362) (-0.8485274441869115) ^* spawnedAsteroidVelocityScale
-                  bottomRightV = V2 0.8485282760711782 0.8485279987765132 ^* spawnedAsteroidVelocityScale
-                  topRightV = V2 0.8485305610016184 (-0.8485257138391733) ^* spawnedAsteroidVelocityScale
-                  bottomLeftV = V2 (-0.8485243273607558) 0.8485319474698503 ^* spawnedAsteroidVelocityScale
-              in D.snoc (spawnAsteroid Small ((+ (-30)) <$> asteroidPosition asteroid) topLeftV (asteroidRotationSpeed asteroid))
-                 . D.snoc (spawnAsteroid Small ((+ 30) <$> asteroidPosition asteroid) bottomRightV (asteroidRotationSpeed asteroid))
-                 . D.snoc (spawnAsteroid Small ((\(V2 x y) -> V2 (x + 30) (y - 30)) $ asteroidPosition asteroid) topRightV (asteroidRotationSpeed asteroid))
-                 . D.snoc (spawnAsteroid Small ((\(V2 x y) -> V2 (x - 30) (y + 30)) $ asteroidPosition asteroid) bottomLeftV (asteroidRotationSpeed asteroid))
+              let tlV = topLeftV ^* spawnedAsteroidVelocityScale
+                  brV = bottomRightV ^* spawnedAsteroidVelocityScale
+                  trV = topRightV ^* spawnedAsteroidVelocityScale
+                  blV = bottomLeftV ^* spawnedAsteroidVelocityScale
+              in D.snoc (spawnAsteroid Small ((+ (-30)) <$> asteroidPosition asteroid) tlV (asteroidRotationSpeed asteroid))
+                 . D.snoc (spawnAsteroid Small ((+ 30) <$> asteroidPosition asteroid) brV (asteroidRotationSpeed asteroid))
+                 . D.snoc (spawnAsteroid Small ((\(V2 x y) -> V2 (x + 30) (y - 30)) $ asteroidPosition asteroid) trV (asteroidRotationSpeed asteroid))
+                 . D.snoc (spawnAsteroid Small ((\(V2 x y) -> V2 (x - 30) (y + 30)) $ asteroidPosition asteroid) blV (asteroidRotationSpeed asteroid))
                  $ newAsteroids
 
 render :: GameState -> IO ()
