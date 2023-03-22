@@ -5,8 +5,9 @@
 
 module Asteroids.Game where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.Foldable
+import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 import Deque.Strict (Deque)
@@ -22,6 +23,8 @@ import qualified SDL.Font as Font
 import System.Random
 
 import qualified Asteroids.Linear.Vector as AV
+
+import qualified Debug.Trace as Debug
 
 windowConfig :: WindowConfig
 windowConfig
@@ -89,6 +92,11 @@ initButtonState
   , buttonStateFire  = KeyRelease
   }
 
+data GameStatus
+  = Playing
+  | GameOver
+  deriving (Eq, Show)
+
 data GameState
   = GameState
   { gameStateRenderer            :: SDL.Renderer
@@ -112,6 +120,7 @@ data GameState
   , gameStateScore               :: Int
   , gameStateFont                :: Font.Font
   , gameStateRandGen             :: StdGen
+  , gameStateStatus              :: GameStatus
   }
   deriving (Eq, Show)
 
@@ -132,6 +141,11 @@ isCollidingBox box other =
      && overLap boxY boxH otherY otherH
   where
     overLap x xw y yw = x + xw >= y && x <= y + yw
+
+collidingBoxRect :: CollisionBox -> SDL.Rectangle CInt
+collidingBoxRect CollisionBox {..} = SDL.Rectangle
+  (SDL.P $ (truncate <$> collisionBoxPosition))
+  (truncate <$> collisionBoxSize)
 
 class HasPosition a where
   getPosition :: a -> V2 Float
@@ -188,6 +202,10 @@ instance HasPosition Ship where
 instance HasVelocity Ship where
   getVelocity = shipVelocity
   setVelocity ship v = ship { shipVelocity = v }
+
+instance HasCollisionBox Ship where
+  getCollisionBox Ship {..} =
+    CollisionBox shipPosition (V2 5 5)
 
 maxBullets :: Int
 maxBullets = 15
@@ -426,6 +444,7 @@ initGameState renderer font = do
     , gameStateScore               = 0
     , gameStateFont                = font
     , gameStateRandGen             = randGen
+    , gameStateStatus              = Playing
     }
 
 run :: IO ()
@@ -548,7 +567,8 @@ update state@GameState {..} =
              gameStateBullets
         else gameStateBullets
       collisions = checkAsteroidCollisions (updateAsteroids gameStateAsteroids) (updateBulletPhysics bullets)
-      state' = handleCollisionResults state [collisions]
+      shipCollision = checkShipCollision gameStatePlayerShip gameStateAsteroids
+      state' = handleCollisionResults state $ collisions : maybeToList shipCollision
       ship = updatePosition gameStatePlayerShip delta
       nextState = state' { gameStateAccumulator = gameStateAccumulator - delta
                          , gameStateTicks = gameStateTicks + delta
@@ -568,6 +588,7 @@ update state@GameState {..} =
 
 data CollisionResult
   = BulletAndAsteroidCollisions Int (Deque Bullet) (Deque Asteroid)
+  | ShipCollision
   deriving (Eq, Show)
 
 handleCollisionResults :: GameState -> [CollisionResult] -> GameState
@@ -591,6 +612,8 @@ handleCollisionResults = foldl' handleCollision
          , gameStateAsteroidSpawnDelta = nextSpawnDelta
          , gameStateAsteroidSpawnFactor = nextSpawnFactor
          }
+    handleCollision gameState ShipCollision =
+      Debug.trace "Handling ShipCollision!" $ gameState { gameStateStatus = GameOver }
 
 checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> CollisionResult
 checkAsteroidCollisions asteroids bullets =
@@ -621,6 +644,14 @@ checkAsteroidCollisions asteroids bullets =
         let aBox = getCollisionBox a
             bBox = getCollisionBox b
         in isCollidingBox aBox bBox
+
+checkShipCollision :: Ship -> Deque Asteroid -> Maybe CollisionResult
+checkShipCollision ship asteroids
+  | any (isShipColliding ship) $ Exts.toList asteroids = Just ShipCollision
+  | otherwise                                          = Nothing
+  where
+    isShipColliding :: Ship -> Asteroid -> Bool
+    isShipColliding shp ast = isCollidingBox (getCollisionBox shp) (getCollisionBox ast)
 
 filterDeadBullets :: Deque Bullet -> Deque Bullet
 filterDeadBullets = D.filter isAlive
@@ -661,6 +692,9 @@ render GameState {..} = do
 
   renderText (T.pack . show $ gameStateScore) (V2 10 10) gameStateFont gameStateRenderer
 
+  when (gameStateStatus == GameOver) $
+    renderText (T.pack "GAME OVER") (V2 200 200) gameStateFont gameStateRenderer
+
   SDL.present gameStateRenderer
 
 renderText :: Text -> V2 Int -> Font.Font -> SDL.Renderer -> IO ()
@@ -673,12 +707,15 @@ renderText txt position fnt renderer = do
   SDL.freeSurface textSurface
 
 renderPlayerShip :: Ship -> SDL.Renderer -> IO ()
-renderPlayerShip Ship {..} renderer = do
+renderPlayerShip ship@Ship {..} renderer = do
   SDL.rendererDrawColor renderer $= V4 0 255 0 255
   let shipPoints
         = VS.map (rotateOrigin (truncate <$> shipPosition) shipRotation)
         . playerShipPoints (truncate <$> shipPosition) $ shipSize
   SDL.drawLines renderer shipPoints
+  let shipBox = getCollisionBox ship
+  SDL.rendererDrawColor renderer $= V4 0 0 255 255
+  SDL.drawRect renderer (Just $ collidingBoxRect shipBox)
 
 playerShipPoints :: V2 CInt -> CInt -> VS.Vector (SDL.Point V2 CInt)
 playerShipPoints position size
