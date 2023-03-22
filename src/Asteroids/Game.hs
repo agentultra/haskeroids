@@ -91,21 +91,23 @@ initButtonState
 
 data GameState
   = GameState
-  { gameStateRenderer       :: SDL.Renderer
-  , gameStateFps            :: Float
-  , gameStateTicks          :: Float
-  , gameStateCurrentTime    :: Float
-  , gameStateAccumulator    :: Float
-  , gameStateButtonState    :: ButtonState
-  , gameStatePlayerShip     :: Ship
-  , gameStateBullets        :: Deque Bullet
-  , gameStateBulletTimer    :: Float
-  , gameStateBulletTimerMax :: Float
-  , gameStateBulletAgeMax   :: Int
-  , gameStateAsteroids      :: Deque Asteroid
-  , gameStateScore          :: Int
-  , gameStateFont           :: Font.Font
-  , gameStateRandGen        :: StdGen
+  { gameStateRenderer           :: SDL.Renderer
+  , gameStateFps                :: Float
+  , gameStateTicks              :: Float
+  , gameStateCurrentTime        :: Float
+  , gameStateAccumulator        :: Float
+  , gameStateButtonState        :: ButtonState
+  , gameStatePlayerShip         :: Ship
+  , gameStateBullets            :: Deque Bullet
+  , gameStateBulletTimer        :: Float
+  , gameStateBulletTimerMax     :: Float
+  , gameStateBulletAgeMax       :: Int
+  , gameStateAsteroids          :: Deque Asteroid
+  , gameStateAsteroidSpawnTimer :: Timer
+  , gameStateAsteroidSpawnDelta :: Float
+  , gameStateScore              :: Int
+  , gameStateFont               :: Font.Font
+  , gameStateRandGen            :: StdGen
   }
   deriving (Eq, Show)
 
@@ -137,6 +139,28 @@ class HasVelocity a where
 
 class HasCollisionBox a where
   getCollisionBox :: a -> CollisionBox
+
+data Timer
+  = Timer
+  { timerStart   :: Float
+  , timerElapsed :: Float
+  }
+  deriving (Eq, Show)
+
+initTimer :: Float -> Timer
+initTimer startTime = Timer startTime 0.0
+
+updateTimer :: Timer -> Float -> Timer
+updateTimer timer currentTime =
+  let elapsed = currentTime - timerStart timer
+  in timer { timerElapsed = elapsed }
+
+resetTimer :: Timer -> Float -> Timer
+resetTimer timer currentTime
+  = timer
+  { timerStart = currentTime
+  , timerElapsed = 0.0
+  }
 
 data Ship
   = Ship
@@ -331,7 +355,8 @@ renderAsteroids asteroids renderer = forM_ asteroids $ \a -> renderAsteroid a re
 
 spawnRandomAsteroid :: GameState -> GameState
 spawnRandomAsteroid gameState
-  | ((< maxAsteroids) . length . Exts.toList $ gameStateAsteroids gameState) && truncate (gameStateCurrentTime gameState) `mod` (20 :: Integer) == 0 =
+  | ((< maxAsteroids) . length . Exts.toList $ gameStateAsteroids gameState)
+    && spawnTimerElapsed gameState =
     let randGen = gameStateRandGen gameState
         asteroids = gameStateAsteroids gameState
         -- 0: spawn from sides, 1: spawn from top
@@ -350,8 +375,14 @@ spawnRandomAsteroid gameState
         asteroid = spawnAsteroid Big asteroidP asteroidV' 0.2
     in gameState { gameStateAsteroids = D.snoc asteroid asteroids
                  , gameStateRandGen = randGen'''
+                 , gameStateAsteroidSpawnTimer = resetTimer (gameStateAsteroidSpawnTimer gameState) (gameStateCurrentTime gameState)
                  }
   | otherwise = gameState
+  where
+    spawnTimerElapsed :: GameState -> Bool
+    spawnTimerElapsed GameState {..} =
+      let Timer {..} = gameStateAsteroidSpawnTimer
+      in timerElapsed >= gameStateAsteroidSpawnDelta
 
 initGameState :: SDL.Renderer -> Font.Font -> IO GameState
 initGameState renderer font = do
@@ -373,21 +404,23 @@ initGameState renderer font = do
       randGen = mkStdGen $ floor currentTime
   pure
     $ GameState
-    { gameStateRenderer       = renderer
-    , gameStateFps            = 0.0
-    , gameStateTicks          = 0.0
-    , gameStateCurrentTime    = currentTime
-    , gameStateAccumulator    = 0.0
-    , gameStatePlayerShip     = initPlayerShip
-    , gameStateButtonState    = initButtonState
-    , gameStateBullets        = mempty
-    , gameStateBulletTimer    = 0.0
-    , gameStateBulletTimerMax = 1.0
-    , gameStateBulletAgeMax   = 50
-    , gameStateAsteroids      = Exts.fromList [smallAsteroid, largeAsteroid]
-    , gameStateScore          = 0
-    , gameStateFont           = font
-    , gameStateRandGen        = randGen
+    { gameStateRenderer           = renderer
+    , gameStateFps                = 0.0
+    , gameStateTicks              = 0.0
+    , gameStateCurrentTime        = currentTime
+    , gameStateAccumulator        = 0.0
+    , gameStatePlayerShip         = initPlayerShip
+    , gameStateButtonState        = initButtonState
+    , gameStateBullets            = mempty
+    , gameStateBulletTimer        = 0.0
+    , gameStateBulletTimerMax     = 1.0
+    , gameStateBulletAgeMax       = 50
+    , gameStateAsteroids          = Exts.fromList [smallAsteroid, largeAsteroid]
+    , gameStateAsteroidSpawnTimer = initTimer currentTime
+    , gameStateAsteroidSpawnDelta = 15.0
+    , gameStateScore              = 0
+    , gameStateFont               = font
+    , gameStateRandGen            = randGen
     }
 
 run :: IO ()
@@ -464,11 +497,13 @@ loop state@GameState {..} = do
   newTime <- SDL.time
   let frameTime = newTime - gameStateCurrentTime
       fps = 1 / frameTime
-      state' = update state { gameStateCurrentTime = newTime
-                            , gameStateAccumulator = gameStateAccumulator + frameTime
-                            , gameStateButtonState = buttonState'
-                            , gameStateFps         = fps
-                            }
+      state' = update state
+        { gameStateCurrentTime = newTime
+        , gameStateAccumulator = gameStateAccumulator + frameTime
+        , gameStateButtonState = buttonState'
+        , gameStateFps         = fps
+        , gameStateAsteroidSpawnTimer = updateTimer gameStateAsteroidSpawnTimer newTime
+        }
   render state'
   let state'' = spawnRandomAsteroid . updateBulletAge $ state'
   unless qPressed $ do
