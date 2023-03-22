@@ -91,23 +91,27 @@ initButtonState
 
 data GameState
   = GameState
-  { gameStateRenderer           :: SDL.Renderer
-  , gameStateFps                :: Float
-  , gameStateTicks              :: Float
-  , gameStateCurrentTime        :: Float
-  , gameStateAccumulator        :: Float
-  , gameStateButtonState        :: ButtonState
-  , gameStatePlayerShip         :: Ship
-  , gameStateBullets            :: Deque Bullet
-  , gameStateBulletTimer        :: Float
-  , gameStateBulletTimerMax     :: Float
-  , gameStateBulletAgeMax       :: Int
-  , gameStateAsteroids          :: Deque Asteroid
-  , gameStateAsteroidSpawnTimer :: Timer
-  , gameStateAsteroidSpawnDelta :: Float
-  , gameStateScore              :: Int
-  , gameStateFont               :: Font.Font
-  , gameStateRandGen            :: StdGen
+  { gameStateRenderer            :: SDL.Renderer
+  , gameStateFps                 :: Float
+  , gameStateTicks               :: Float
+  , gameStateCurrentTime         :: Float
+  , gameStateAccumulator         :: Float
+  , gameStateButtonState         :: ButtonState
+  , gameStatePlayerShip          :: Ship
+  , gameStateBullets             :: Deque Bullet
+  , gameStateBulletTimer         :: Float
+  , gameStateBulletTimerMax      :: Float
+  , gameStateBulletAgeMax        :: Int
+  , gameStateAsteroids           :: Deque Asteroid
+  , gameStateAsteroidSpawnTimer  :: Timer
+  , gameStateAsteroidSpawnDelta  :: Float
+  -- ^ The elapsed time interval before spawning a new asteroid
+  , gameStateAsteroidSpawnFactor :: Float
+  -- ^ The amount to decrease the spawn delta after detecting a bullet
+  -- collision
+  , gameStateScore               :: Int
+  , gameStateFont                :: Font.Font
+  , gameStateRandGen             :: StdGen
   }
   deriving (Eq, Show)
 
@@ -397,30 +401,31 @@ initGameState renderer font = do
         , shipThrustMax     = 3.0
         , shipAcceleration  = V2 0.0 0.0
         , shipMaxVelocity   = 49.0
-        , shipVelocity = V2 0.0 0.0
+        , shipVelocity      = V2 0.0 0.0
         }
       smallAsteroid = spawnAsteroid Small (V2 200 200) (V2 1.2 1.2) 0.2
       largeAsteroid = spawnAsteroid Big (V2 400 100) (V2 1.2 1.2) 0.2
       randGen = mkStdGen $ floor currentTime
   pure
     $ GameState
-    { gameStateRenderer           = renderer
-    , gameStateFps                = 0.0
-    , gameStateTicks              = 0.0
-    , gameStateCurrentTime        = currentTime
-    , gameStateAccumulator        = 0.0
-    , gameStatePlayerShip         = initPlayerShip
-    , gameStateButtonState        = initButtonState
-    , gameStateBullets            = mempty
-    , gameStateBulletTimer        = 0.0
-    , gameStateBulletTimerMax     = 1.0
-    , gameStateBulletAgeMax       = 50
-    , gameStateAsteroids          = Exts.fromList [smallAsteroid, largeAsteroid]
-    , gameStateAsteroidSpawnTimer = initTimer currentTime
-    , gameStateAsteroidSpawnDelta = 15.0
-    , gameStateScore              = 0
-    , gameStateFont               = font
-    , gameStateRandGen            = randGen
+    { gameStateRenderer            = renderer
+    , gameStateFps                 = 0.0
+    , gameStateTicks               = 0.0
+    , gameStateCurrentTime         = currentTime
+    , gameStateAccumulator         = 0.0
+    , gameStatePlayerShip          = initPlayerShip
+    , gameStateButtonState         = initButtonState
+    , gameStateBullets             = mempty
+    , gameStateBulletTimer         = 0.0
+    , gameStateBulletTimerMax      = 1.0
+    , gameStateBulletAgeMax        = 50
+    , gameStateAsteroids           = Exts.fromList [smallAsteroid, largeAsteroid]
+    , gameStateAsteroidSpawnTimer  = initTimer currentTime
+    , gameStateAsteroidSpawnDelta  = 15.0
+    , gameStateAsteroidSpawnFactor = 0.1
+    , gameStateScore               = 0
+    , gameStateFont                = font
+    , gameStateRandGen             = randGen
     }
 
 run :: IO ()
@@ -557,6 +562,7 @@ update state@GameState {..} =
                          }
   in
     if gameStateAccumulator <= delta
+
     then nextState
     else update nextState
 
@@ -570,11 +576,20 @@ handleCollisionResults = foldl' handleCollision
     handleCollision :: GameState -> CollisionResult -> GameState
     handleCollision gameState (BulletAndAsteroidCollisions numCols bs as) =
       let (randVelocityScale, randGen) = uniformR (2.0, 3.0) $ gameStateRandGen gameState
+          nextSpawnDelta
+            | numCols /= 0 =
+              max (gameStateAsteroidSpawnDelta gameState - gameStateAsteroidSpawnFactor gameState) 1.0
+            | otherwise = gameStateAsteroidSpawnDelta gameState
+          nextSpawnFactor
+            | numCols /= 0 = gameStateAsteroidSpawnFactor gameState * 1.1
+            | otherwise    = gameStateAsteroidSpawnFactor gameState
       in gameState
          { gameStateBullets = filterDeadBullets bs
          , gameStateAsteroids = filterDeadAsteroids randVelocityScale as
          , gameStateScore = gameStateScore gameState + numCols
          , gameStateRandGen = randGen
+         , gameStateAsteroidSpawnDelta = nextSpawnDelta
+         , gameStateAsteroidSpawnFactor = nextSpawnFactor
          }
 
 checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> CollisionResult
