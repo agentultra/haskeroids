@@ -420,24 +420,37 @@ spawnRandomAsteroid gameState
       let Timer {..} = gameStateAsteroidSpawnTimer
       in timerElapsed >= gameStateAsteroidSpawnDelta
 
+initAsteroids :: Deque Asteroid
+initAsteroids = Exts.fromList [smallAsteroid, largeAsteroid]
+  where
+    smallAsteroid = spawnAsteroid Small (V2 200 200) (V2 1.2 1.2) 0.2
+    largeAsteroid = spawnAsteroid Big (V2 400 100) (V2 1.2 1.2) 0.2
+
+initAsteroidSpawnDelta :: Float
+initAsteroidSpawnDelta = 15.0
+
+initAsteroidSpawnFactor :: Float
+initAsteroidSpawnFactor = 0.1
+
+initPlayerShip :: Ship
+initPlayerShip
+  = Ship
+  { shipPosition      = V2 20 20
+  , shipSize          = 20
+  , shipRotation      = 0.0
+  , shipRotationSpeed = 0.1
+  , shipThrust        = 0.0
+  , shipThrustSpeed   = 0.2
+  , shipThrustMax     = 3.0
+  , shipAcceleration  = V2 0.0 0.0
+  , shipMaxVelocity   = 49.0
+  , shipVelocity      = V2 0.0 0.0
+  }
+
 initGameState :: SDL.Renderer -> Font.Font -> IO GameState
 initGameState renderer font = do
   currentTime <- SDL.time
-  let initPlayerShip = Ship
-        { shipPosition      = V2 20 20
-        , shipSize          = 20
-        , shipRotation      = 0.0
-        , shipRotationSpeed = 0.1
-        , shipThrust        = 0.0
-        , shipThrustSpeed   = 0.2
-        , shipThrustMax     = 3.0
-        , shipAcceleration  = V2 0.0 0.0
-        , shipMaxVelocity   = 49.0
-        , shipVelocity      = V2 0.0 0.0
-        }
-      smallAsteroid = spawnAsteroid Small (V2 200 200) (V2 1.2 1.2) 0.2
-      largeAsteroid = spawnAsteroid Big (V2 400 100) (V2 1.2 1.2) 0.2
-      randGen = mkStdGen $ floor currentTime
+  let randGen = mkStdGen $ floor currentTime
   pure
     $ GameState
     { gameStateRenderer            = renderer
@@ -451,10 +464,10 @@ initGameState renderer font = do
     , gameStateBulletTimer         = 0.0
     , gameStateBulletTimerMax      = 1.0
     , gameStateBulletAgeMax        = 50
-    , gameStateAsteroids           = Exts.fromList [smallAsteroid, largeAsteroid]
+    , gameStateAsteroids           = initAsteroids
     , gameStateAsteroidSpawnTimer  = initTimer currentTime
-    , gameStateAsteroidSpawnDelta  = 15.0
-    , gameStateAsteroidSpawnFactor = 0.1
+    , gameStateAsteroidSpawnDelta  = initAsteroidSpawnDelta
+    , gameStateAsteroidSpawnFactor = initAsteroidSpawnFactor
     , gameStateScore               = 0
     , gameStateFont                = font
     , gameStateRandGen             = randGen
@@ -718,13 +731,30 @@ gameOverScene
   }
 
 gameOverUpdate :: GameState -> GameState
-gameOverUpdate = id
+gameOverUpdate gameState
+  | keyDown . buttonStateFire $ gameStateButtonState gameState = startNewGame gameState
+  | otherwise = gameState
+  where
+    startNewGame state@GameState{..}
+      = state
+      { gameStateStatus              = Main
+      , gameStateScene               = mainScene
+      , gameStateAsteroids           = initAsteroids
+      , gameStateBullets             = mempty
+      , gameStateScore               = 0
+      , gameStatePlayerShip          = initPlayerShip
+      , gameStateAsteroidSpawnTimer  = initTimer gameStateCurrentTime
+      , gameStateAsteroidSpawnDelta  = initAsteroidSpawnDelta
+      , gameStateAsteroidSpawnFactor = initAsteroidSpawnFactor
+      }
 
 gameOverRender :: GameState -> IO ()
 gameOverRender GameState {..} = do
   SDL.rendererDrawColor gameStateRenderer $= V4 0 0 0 255
   SDL.clear gameStateRenderer
+  renderText (T.pack $ "Final score: " ++ show gameStateScore) (V2 200 140) gameStateFont gameStateRenderer
   renderText (T.pack "GAME OVER") (V2 200 200) gameStateFont gameStateRenderer
+  renderText (T.pack "Press Fire to start a new game.") (V2 200 260) gameStateFont gameStateRenderer
   SDL.present gameStateRenderer
 
 renderText :: Text -> V2 Int -> Font.Font -> SDL.Renderer -> IO ()
