@@ -90,7 +90,7 @@ initButtonState
   }
 
 data GameStatus
-  = Playing
+  = Main
   | GameOver
   deriving (Eq, Show)
 
@@ -99,6 +99,17 @@ data Scene
   { sceneUpdate :: GameState -> GameState
   , sceneRender :: GameState -> IO ()
   }
+
+runScene :: GameState -> Scene -> IO GameState
+runScene gameState scene@Scene {..} = do
+  let gameState' = (sceneUpdate gameState)
+        { gameStateAccumulator = gameStateAccumulator gameState - delta
+        , gameStateTicks = gameStateTicks gameState + delta
+        }
+  sceneRender gameState'
+  if gameStateAccumulator gameState' <= delta
+    then pure gameState'
+    else runScene gameState' scene
 
 data GameState
   = GameState
@@ -124,8 +135,8 @@ data GameState
   , gameStateFont                :: Font.Font
   , gameStateRandGen             :: StdGen
   , gameStateStatus              :: GameStatus
+  , gameStateScene               :: Scene
   }
-  deriving (Eq, Show)
 
 data CollisionBox
   = CollisionBox
@@ -447,7 +458,8 @@ initGameState renderer font = do
     , gameStateScore               = 0
     , gameStateFont                = font
     , gameStateRandGen             = randGen
-    , gameStateStatus              = Playing
+    , gameStateStatus              = Main
+    , gameStateScene               = mainScene
     }
 
 run :: IO ()
@@ -524,20 +536,23 @@ loop state@GameState {..} = do
   newTime <- SDL.time
   let frameTime = newTime - gameStateCurrentTime
       fps = 1 / frameTime
-      state' = update state
-        { gameStateCurrentTime = newTime
-        , gameStateAccumulator = gameStateAccumulator + frameTime
-        , gameStateButtonState = buttonState'
-        , gameStateFps         = fps
-        , gameStateAsteroidSpawnTimer = updateTimer gameStateAsteroidSpawnTimer newTime
-        }
-  render state'
-  let state'' = spawnRandomAsteroid . updateBulletAge $ state'
+  state' <- runScene (state { gameStateCurrentTime = newTime
+                            , gameStateAccumulator = gameStateAccumulator + frameTime
+                            , gameStateButtonState = buttonState'
+                            , gameStateFps         = fps
+                            }) gameStateScene
   unless qPressed $ do
-    loop state'' { gameStatePlayerShip = (getShip state'') { shipAcceleration = V2 0.0 0.0 } }
+    loop state' { gameStatePlayerShip = (getShip state') { shipAcceleration = V2 0.0 0.0 } }
   where
     getShip :: GameState -> Ship
     getShip GameState {..} = gameStatePlayerShip
+
+mainScene :: Scene
+mainScene
+  = Scene
+  { sceneUpdate = update
+  , sceneRender = render
+  }
 
 update :: GameState -> GameState
 update state@GameState {..} =
@@ -573,21 +588,16 @@ update state@GameState {..} =
       shipCollision = checkShipCollision gameStatePlayerShip gameStateAsteroids
       state' = handleCollisionResults state $ collisions : maybeToList shipCollision
       ship = updatePosition gameStatePlayerShip delta
-      nextState = state' { gameStateAccumulator = gameStateAccumulator - delta
-                         , gameStateTicks = gameStateTicks + delta
-                         , gameStatePlayerShip = ship
+      nextState = state' { gameStatePlayerShip = ship
                            { shipRotation = shipRotation gameStatePlayerShip + turnAmount
                            , shipThrust = thrust
                            , shipAcceleration = acceleration
                            , shipVelocity = AV.clampVector velocity $ shipMaxVelocity gameStatePlayerShip
                           }
+                         , gameStateAsteroidSpawnTimer = updateTimer gameStateAsteroidSpawnTimer gameStateCurrentTime
                          , gameStateBulletTimer = bulletTimer
                          }
-  in
-    if gameStateAccumulator <= delta
-
-    then nextState
-    else update nextState
+  in spawnRandomAsteroid . updateBulletAge $ nextState
 
 data CollisionResult
   = BulletAndAsteroidCollisions Int (Deque Bullet) (Deque Asteroid)
@@ -615,7 +625,11 @@ handleCollisionResults = foldl' handleCollision
          , gameStateAsteroidSpawnDelta = nextSpawnDelta
          , gameStateAsteroidSpawnFactor = nextSpawnFactor
          }
-    handleCollision gameState ShipCollision = gameState { gameStateStatus = GameOver }
+    handleCollision gameState ShipCollision
+      = gameState
+      { gameStateStatus = GameOver
+      , gameStateScene = gameOverScene
+      }
 
 checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> CollisionResult
 checkAsteroidCollisions asteroids bullets =
@@ -694,9 +708,23 @@ render GameState {..} = do
 
   renderText (T.pack . show $ gameStateScore) (V2 10 10) gameStateFont gameStateRenderer
 
-  when (gameStateStatus == GameOver) $
-    renderText (T.pack "GAME OVER") (V2 200 200) gameStateFont gameStateRenderer
+  SDL.present gameStateRenderer
 
+gameOverScene :: Scene
+gameOverScene
+  = Scene
+  { sceneUpdate = gameOverUpdate
+  , sceneRender = gameOverRender
+  }
+
+gameOverUpdate :: GameState -> GameState
+gameOverUpdate = id
+
+gameOverRender :: GameState -> IO ()
+gameOverRender GameState {..} = do
+  SDL.rendererDrawColor gameStateRenderer $= V4 0 0 0 255
+  SDL.clear gameStateRenderer
+  renderText (T.pack "GAME OVER") (V2 200 200) gameStateFont gameStateRenderer
   SDL.present gameStateRenderer
 
 renderText :: Text -> V2 Int -> Font.Font -> SDL.Renderer -> IO ()
