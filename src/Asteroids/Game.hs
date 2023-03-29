@@ -94,6 +94,12 @@ data GameStatus
   | GameOver
   deriving (Eq, Show)
 
+data Scene
+  = Scene
+  { sceneUpdate :: GameState -> GameState
+  , sceneRender :: GameState -> IO ()
+  }
+
 data GameState
   = GameState
   { gameStateRenderer            :: SDL.Renderer
