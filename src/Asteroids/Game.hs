@@ -17,14 +17,11 @@ import Foreign.C.Types
 import qualified GHC.Exts as Exts
 import Linear
 import qualified SDL
-import qualified SDL.Raw.Video as Video
 import SDL (($=), WindowConfig (..))
 import qualified SDL.Font as Font
 import System.Random
 
 import qualified Asteroids.Linear.Vector as AV
-
-import qualified Debug.Trace as Debug
 
 windowConfig :: WindowConfig
 windowConfig
@@ -144,7 +141,7 @@ isCollidingBox box other =
 
 collidingBoxRect :: CollisionBox -> SDL.Rectangle CInt
 collidingBoxRect CollisionBox {..} = SDL.Rectangle
-  (SDL.P $ (truncate <$> collisionBoxPosition))
+  (SDL.P (truncate <$> collisionBoxPosition))
   (truncate <$> collisionBoxSize)
 
 class HasPosition a where
@@ -612,8 +609,7 @@ handleCollisionResults = foldl' handleCollision
          , gameStateAsteroidSpawnDelta = nextSpawnDelta
          , gameStateAsteroidSpawnFactor = nextSpawnFactor
          }
-    handleCollision gameState ShipCollision =
-      Debug.trace "Handling ShipCollision!" $ gameState { gameStateStatus = GameOver }
+    handleCollision gameState ShipCollision = gameState { gameStateStatus = GameOver }
 
 checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> CollisionResult
 checkAsteroidCollisions asteroids bullets =
@@ -707,15 +703,12 @@ renderText txt position fnt renderer = do
   SDL.freeSurface textSurface
 
 renderPlayerShip :: Ship -> SDL.Renderer -> IO ()
-renderPlayerShip ship@Ship {..} renderer = do
+renderPlayerShip Ship {..} renderer = do
   SDL.rendererDrawColor renderer $= V4 0 255 0 255
   let shipPoints
         = VS.map (rotateOrigin (truncate <$> shipPosition) shipRotation)
         . playerShipPoints (truncate <$> shipPosition) $ shipSize
   SDL.drawLines renderer shipPoints
-  let shipBox = getCollisionBox ship
-  SDL.rendererDrawColor renderer $= V4 0 0 255 255
-  SDL.drawRect renderer (Just $ collidingBoxRect shipBox)
 
 playerShipPoints :: V2 CInt -> CInt -> VS.Vector (SDL.Point V2 CInt)
 playerShipPoints position size
@@ -759,7 +752,6 @@ wrapTorus (V2 px py) size = V2 (wrapX px size) (wrapY py size)
       | (x - fromIntegral s) > 800 = fromIntegral (-s)
       | (x + fromIntegral s) < 0 = 800 + fromIntegral s
       | otherwise = x
-
     wrapY :: Float -> Int -> Float
     wrapY y s
       | (y - fromIntegral s) > 600 = fromIntegral (-s)
