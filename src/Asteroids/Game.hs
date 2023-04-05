@@ -90,8 +90,9 @@ initButtonState
   }
 
 data GameStatus
-  = Main
-  | GameOver
+  = GameOver
+  | Main
+  | MainMenu
   deriving (Eq, Show)
 
 data Scene
@@ -132,11 +133,49 @@ data GameState
   -- ^ The amount to decrease the spawn delta after detecting a bullet
   -- collision
   , gameStateScore               :: Int
-  , gameStateFont                :: Font.Font
+  , gameStateFont32              :: Font.Font
+  , gameStateFont16              :: Font.Font
   , gameStateRandGen             :: StdGen
   , gameStateStatus              :: GameStatus
   , gameStateScene               :: Scene
+  , gameStateMainMenu            :: MainMenuState
   }
+
+data MainMenuState
+  = MainMenuState
+  { mainMenuCursorPosition :: Int
+  , mainMenuChoices :: [MenuChoice]
+  }
+  deriving (Eq, Show)
+
+data MenuChoice
+  = Start
+  | Quit
+  deriving (Eq, Show)
+
+menuDown :: MainMenuState -> MainMenuState
+menuDown mainMenu =
+  let nextCursorPosition =
+        (mainMenuCursorPosition mainMenu + 1)
+        `mod`
+        length (mainMenuChoices mainMenu)
+  in mainMenu { mainMenuCursorPosition = nextCursorPosition }
+
+menuUp :: MainMenuState -> MainMenuState
+menuUp mainMenu =
+  let nextCursorPosition =
+        (mainMenuCursorPosition mainMenu - 1)
+        `mod`
+        length (mainMenuChoices mainMenu)
+  in mainMenu { mainMenuCursorPosition = nextCursorPosition }
+
+menuSelect :: MainMenuState -> MenuChoice
+menuSelect MainMenuState {..} =
+  mainMenuChoices !! mainMenuCursorPosition
+
+-- | Safely construct a main menu, avoid using the type constructor.
+mkMenu :: [MenuChoice] -> MainMenuState
+mkMenu = MainMenuState 0
 
 data CollisionBox
   = CollisionBox
@@ -447,8 +486,11 @@ initPlayerShip
   , shipVelocity      = V2 0.0 0.0
   }
 
-initGameState :: SDL.Renderer -> Font.Font -> IO GameState
-initGameState renderer font = do
+initMainMenu :: MainMenuState
+initMainMenu = mkMenu [Start, Quit]
+
+initGameState :: SDL.Renderer -> Font.Font -> Font.Font -> IO GameState
+initGameState renderer font32 font16 = do
   currentTime <- SDL.time
   let randGen = mkStdGen $ floor currentTime
   pure
@@ -469,10 +511,12 @@ initGameState renderer font = do
     , gameStateAsteroidSpawnDelta  = initAsteroidSpawnDelta
     , gameStateAsteroidSpawnFactor = initAsteroidSpawnFactor
     , gameStateScore               = 0
-    , gameStateFont                = font
+    , gameStateFont32              = font32
+    , gameStateFont16              = font16
     , gameStateRandGen             = randGen
-    , gameStateStatus              = Main
-    , gameStateScene               = mainScene
+    , gameStateStatus              = MainMenu
+    , gameStateScene               = mainMenuScene
+    , gameStateMainMenu            = initMainMenu
     }
 
 run :: IO ()
@@ -482,8 +526,9 @@ run = do
   window <- SDL.createWindow "Asteroids" windowConfig
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
   Font.initialize
-  fNoticia <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 32
-  state <- initGameState renderer fNoticia
+  fNoticia32 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 32
+  fNoticia16 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 16
+  state <- initGameState renderer fNoticia32 fNoticia16
 
   loop state
 
@@ -719,7 +764,7 @@ render GameState {..} = do
   renderBullets gameStateBullets gameStateRenderer
   renderAsteroids gameStateAsteroids gameStateRenderer
 
-  renderText (T.pack . show $ gameStateScore) (V2 10 10) gameStateFont gameStateRenderer
+  renderText (T.pack . show $ gameStateScore) (V2 10 10) gameStateFont32 gameStateRenderer
 
   SDL.present gameStateRenderer
 
@@ -752,10 +797,49 @@ gameOverRender :: GameState -> IO ()
 gameOverRender GameState {..} = do
   SDL.rendererDrawColor gameStateRenderer $= V4 0 0 0 255
   SDL.clear gameStateRenderer
-  renderText (T.pack $ "Final score: " ++ show gameStateScore) (V2 200 140) gameStateFont gameStateRenderer
-  renderText (T.pack "GAME OVER") (V2 200 200) gameStateFont gameStateRenderer
-  renderText (T.pack "Press Fire to start a new game.") (V2 200 260) gameStateFont gameStateRenderer
+  renderText (T.pack $ "Final score: " ++ show gameStateScore) (V2 200 140) gameStateFont32 gameStateRenderer
+  renderText (T.pack "GAME OVER") (V2 200 200) gameStateFont32 gameStateRenderer
+  renderText (T.pack "Press Fire to start a new game.") (V2 200 260) gameStateFont32 gameStateRenderer
   SDL.present gameStateRenderer
+
+mainMenuScene :: Scene
+mainMenuScene
+  = Scene
+  { sceneUpdate = mainMenuUpdate
+  , sceneRender = mainMenuRender
+  }
+
+mainMenuUpdate :: GameState -> GameState
+mainMenuUpdate gameState
+  | keyDown . buttonStateDown $ gameStateButtonState gameState =
+    let mainMenu = gameStateMainMenu gameState
+    in gameState { gameStateMainMenu = menuDown mainMenu }
+  | keyDown . buttonStateUp $ gameStateButtonState gameState =
+    let mainMenu = gameStateMainMenu gameState
+    in gameState { gameStateMainMenu = menuUp mainMenu }
+  | otherwise = gameState
+
+mainMenuRender :: GameState -> IO ()
+mainMenuRender gs@GameState {..} = do
+  SDL.rendererDrawColor gameStateRenderer $= V4 0 0 0 255
+  SDL.clear gameStateRenderer
+  renderText "HASKEROIDS" (V2 200 200) gameStateFont32 gameStateRenderer
+  renderMenu gs (V2 200 280)
+  SDL.present gameStateRenderer
+
+renderMenu :: GameState -> V2 Int -> IO ()
+renderMenu GameState {..} (V2 px py) = do
+  let MainMenuState {..} = gameStateMainMenu
+  forM_ (zip [0..] mainMenuChoices) $ uncurry (renderMenuItem px py mainMenuCursorPosition)
+  where
+    renderMenuItem :: Int -> Int -> Int -> Int -> MenuChoice -> IO ()
+    renderMenuItem x y selected i choice = do
+      let menuItemY = y + (i * 28)
+      when (selected == i) $ do
+        SDL.rendererDrawColor gameStateRenderer $= V4 255 255 255 255
+        let r = SDL.Rectangle (SDL.P (fromIntegral <$> V2 (x - 20) (menuItemY + 8))) (V2 5 5)
+        SDL.fillRect gameStateRenderer (Just r)
+      renderText (T.pack $ show choice) (V2 x menuItemY) gameStateFont16 gameStateRenderer
 
 renderText :: Text -> V2 Int -> Font.Font -> SDL.Renderer -> IO ()
 renderText txt position fnt renderer = do

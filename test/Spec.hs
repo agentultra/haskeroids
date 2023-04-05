@@ -99,6 +99,16 @@ main = hspec $ do
         checkAsteroidCollisions as bs
           `shouldBe` BulletAndAsteroidCollisions 2 expectedBs expectedAs
 
+  describe "MainMenuState" $ do
+    describe "menuUp" $ do
+      it "should wrap the list index" $ do
+        let menuState = mkMenu [Start, Start, Quit]
+        menuUp menuState `shouldBe` MainMenuState 2 [Start, Start, Quit]
+
+    describe "menuDown" $ do
+      it "should wrap the list index" $ do
+        let menuState = MainMenuState 2 [Start, Start, Quit]
+        menuDown menuState `shouldBe` MainMenuState 0 [Start, Start, Quit]
 
 instance Arbitrary KeyState where
   arbitrary = oneof [pure KeyDown, pure KeyRelease]
