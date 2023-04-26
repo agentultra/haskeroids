@@ -71,23 +71,42 @@ keyRelease _          = False
 
 data ButtonState
   = ButtonState
-  { buttonStateUp    :: KeyState
-  , buttonStateDown  :: KeyState
-  , buttonStateLeft  :: KeyState
-  , buttonStateRight :: KeyState
-  , buttonStateFire  :: KeyState
+  { buttonStateUp           :: KeyState
+  , buttonStateUpPressed    :: Bool
+  , buttonStateDown         :: KeyState
+  , buttonStateDownPressed  :: Bool
+  , buttonStateLeft         :: KeyState
+  , buttonStateLeftPressed  :: Bool
+  , buttonStateRight        :: KeyState
+  , buttonStateRightPressed :: Bool
+  , buttonStateFire         :: KeyState
+  , buttonStateFirePressed  :: Bool
   }
   deriving (Eq, Show)
 
 initButtonState :: ButtonState
 initButtonState
   = ButtonState
-  { buttonStateUp    = KeyRelease
-  , buttonStateDown  = KeyRelease
-  , buttonStateLeft  = KeyRelease
-  , buttonStateRight = KeyRelease
-  , buttonStateFire  = KeyRelease
+  { buttonStateUp           = KeyRelease
+  , buttonStateUpPressed    = False
+  , buttonStateDown         = KeyRelease
+  , buttonStateDownPressed  = False
+  , buttonStateLeft         = KeyRelease
+  , buttonStateLeftPressed  = False
+  , buttonStateRight        = KeyRelease
+  , buttonStateRightPressed = False
+  , buttonStateFire         = KeyRelease
+  , buttonStateFirePressed  = False
   }
+
+resetPressedFlags :: ButtonState -> ButtonState
+resetPressedFlags buttons =
+  buttons { buttonStateUpPressed    = False
+          , buttonStateDownPressed  = False
+          , buttonStateLeftPressed  = False
+          , buttonStateRightPressed = False
+          , buttonStateFirePressed  = False
+          }
 
 data GameStatus
   = GameOver
@@ -584,11 +603,16 @@ loop state@GameState {..} = do
       buttonState'
         = gameStateButtonState
         { buttonStateUp = upButtonState
+        , buttonStateUpPressed = wPressed
         -- TODO (james): give this button states too
         , buttonStateDown = downButtonState
+        , buttonStateDownPressed = sPressed
         , buttonStateLeft = leftButtonState
+        , buttonStateLeftPressed = aPressed
         , buttonStateRight = rightButtonState
+        , buttonStateRightPressed = dPressed
         , buttonStateFire = fireButtonState
+        , buttonStateFirePressed = spacePressed
         }
 
   newTime <- SDL.time
@@ -600,7 +624,9 @@ loop state@GameState {..} = do
                             , gameStateFps         = fps
                             }) gameStateScene
   unless qPressed $ do
-    loop state' { gameStatePlayerShip = (getShip state') { shipAcceleration = V2 0.0 0.0 } }
+    loop state' { gameStatePlayerShip = (getShip state') { shipAcceleration = V2 0.0 0.0 }
+                , gameStateButtonState = resetPressedFlags buttonState'
+                }
   where
     getShip :: GameState -> Ship
     getShip GameState {..} = gameStatePlayerShip
@@ -811,12 +837,16 @@ mainMenuScene
 
 mainMenuUpdate :: GameState -> GameState
 mainMenuUpdate gameState
-  | keyDown . buttonStateDown $ gameStateButtonState gameState =
+  | buttonStateDownPressed $ gameStateButtonState gameState =
     let mainMenu = gameStateMainMenu gameState
     in gameState { gameStateMainMenu = menuDown mainMenu }
-  | keyDown . buttonStateUp $ gameStateButtonState gameState =
+  | buttonStateUpPressed $ gameStateButtonState gameState =
     let mainMenu = gameStateMainMenu gameState
     in gameState { gameStateMainMenu = menuUp mainMenu }
+  | buttonStateFirePressed $ gameStateButtonState gameState =
+    case menuSelect $ gameStateMainMenu gameState of
+      Start -> gameState { gameStateScene = mainScene }
+      Quit  -> gameState
   | otherwise = gameState
 
 mainMenuRender :: GameState -> IO ()
@@ -887,7 +917,8 @@ isKeyboardKey event keyState keyCode =
   case SDL.eventPayload event of
     SDL.KeyboardEvent keyboardEvent ->
       SDL.keyboardEventKeyMotion keyboardEvent == keyState &&
-      SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == keyCode
+      SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == keyCode &&
+      not (SDL.keyboardEventRepeat keyboardEvent)
     _ -> False
 
 -- | Wrap an object position around the edges of the screen. `size` is
