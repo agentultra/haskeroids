@@ -112,6 +112,7 @@ data GameStatus
   = GameOver
   | Main
   | MainMenu
+  | ShouldQuit
   deriving (Eq, Show)
 
 data Scene
@@ -623,7 +624,7 @@ loop state@GameState {..} = do
                             , gameStateButtonState = buttonState'
                             , gameStateFps         = fps
                             }) gameStateScene
-  unless qPressed $ do
+  unless (qPressed || gameStateStatus == ShouldQuit) $ do
     loop state' { gameStatePlayerShip = (getShip state') { shipAcceleration = V2 0.0 0.0 }
                 , gameStateButtonState = resetPressedFlags buttonState'
                 }
@@ -846,7 +847,7 @@ mainMenuUpdate gameState
   | buttonStateFirePressed $ gameStateButtonState gameState =
     case menuSelect $ gameStateMainMenu gameState of
       Start -> gameState { gameStateScene = mainScene }
-      Quit  -> gameState
+      Quit  -> gameState { gameStateStatus = ShouldQuit }
   | otherwise = gameState
 
 mainMenuRender :: GameState -> IO ()
