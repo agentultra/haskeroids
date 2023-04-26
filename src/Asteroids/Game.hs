@@ -281,7 +281,7 @@ instance HasCollisionBox Ship where
     CollisionBox shipPosition (V2 5 5)
 
 maxBullets :: Int
-maxBullets = 15
+maxBullets = 5
 
 data Bullet
   = Bullet
@@ -524,8 +524,8 @@ initGameState renderer font32 font16 = do
     , gameStateButtonState         = initButtonState
     , gameStateBullets             = mempty
     , gameStateBulletTimer         = 0.0
-    , gameStateBulletTimerMax      = 1.0
-    , gameStateBulletAgeMax        = 50
+    , gameStateBulletTimerMax      = 3.0
+    , gameStateBulletAgeMax        = 150
     , gameStateAsteroids           = initAsteroids
     , gameStateAsteroidSpawnTimer  = initTimer currentTime
     , gameStateAsteroidSpawnDelta  = initAsteroidSpawnDelta
@@ -804,7 +804,7 @@ gameOverScene
 
 gameOverUpdate :: GameState -> GameState
 gameOverUpdate gameState
-  | keyDown . buttonStateFire $ gameStateButtonState gameState = startNewGame gameState
+  | buttonStateFirePressed $ gameStateButtonState gameState = startNewGame gameState
   | otherwise = gameState
   where
     startNewGame state@GameState{..}
