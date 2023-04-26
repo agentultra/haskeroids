@@ -813,11 +813,13 @@ gameOverUpdate gameState
       , gameStateScene               = mainScene
       , gameStateAsteroids           = initAsteroids
       , gameStateBullets             = mempty
+      , gameStateBulletTimer         = 0
       , gameStateScore               = 0
       , gameStatePlayerShip          = initPlayerShip
       , gameStateAsteroidSpawnTimer  = initTimer gameStateCurrentTime
       , gameStateAsteroidSpawnDelta  = initAsteroidSpawnDelta
       , gameStateAsteroidSpawnFactor = initAsteroidSpawnFactor
+      , gameStateButtonState         = initButtonState
       }
 
 gameOverRender :: GameState -> IO ()
