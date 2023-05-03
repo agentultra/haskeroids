@@ -26,6 +26,7 @@ dependencies:
 - mersenne-random-pure64
 - random
 - sdl2
+- sdl2-mixer
 - sdl2-ttf
 - text
 - vector

@@ -40,6 +40,7 @@ library
     , mersenne-random-pure64
     , random
     , sdl2
+    , sdl2-mixer
     , sdl2-ttf
     , text
     , vector
@@ -60,6 +61,7 @@ executable asteroids
     , mersenne-random-pure64
     , random
     , sdl2
+    , sdl2-mixer
     , sdl2-ttf
     , text
     , vector
@@ -84,6 +86,7 @@ test-suite Asteroids-test
     , quickcheck-classes
     , random
     , sdl2
+    , sdl2-mixer
     , sdl2-ttf
     , text
     , vector

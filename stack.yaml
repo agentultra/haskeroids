@@ -44,6 +44,7 @@ packages:
 extra-deps:
 - git: https://github.com/haskell-game/sdl2.git
   commit: 2879a17f3223fee6f1455184d5d863be810662eb
+- sdl2-mixer-1.2.0.0@sha256:6a6b5a46c035c9e77eaf9c244e45de9e4a9b9a110890cfeeb9fa72faa2419cef,4497
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

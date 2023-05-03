@@ -15,6 +15,13 @@ packages:
   original:
     commit: 2879a17f3223fee6f1455184d5d863be810662eb
     git: https://github.com/haskell-game/sdl2.git
+- completed:
+    hackage: sdl2-mixer-1.2.0.0@sha256:6a6b5a46c035c9e77eaf9c244e45de9e4a9b9a110890cfeeb9fa72faa2419cef,4497
+    pantry-tree:
+      sha256: 5899820c239536aaccfceeb1b6c056ce8ecebbe40f31d3715ca0a53f56d9aaa1
+      size: 764
+  original:
+    hackage: sdl2-mixer-1.2.0.0@sha256:6a6b5a46c035c9e77eaf9c244e45de9e4a9b9a110890cfeeb9fa72faa2419cef,4497
 snapshots:
 - completed:
     sha256: e5f56f619132209b826084cacd6374d7f0344cc88a9d1d305878190e4204ae1f

@@ -19,6 +19,8 @@ import Linear
 import qualified SDL
 import SDL (($=), WindowConfig (..))
 import qualified SDL.Font as Font
+import SDL.Mixer (Chunk)
+import qualified SDL.Mixer as Mixer
 import System.Random
 
 import qualified Asteroids.Linear.Vector as AV
@@ -145,6 +147,7 @@ data GameState
   , gameStateBulletTimer         :: Float
   , gameStateBulletTimerMax      :: Float
   , gameStateBulletAgeMax        :: Int
+  , gameStateBulletSound         :: Chunk
   , gameStateAsteroids           :: Deque Asteroid
   , gameStateAsteroidSpawnTimer  :: Timer
   , gameStateAsteroidSpawnDelta  :: Float
@@ -509,8 +512,8 @@ initPlayerShip
 initMainMenu :: MainMenuState
 initMainMenu = mkMenu [Start, Quit]
 
-initGameState :: SDL.Renderer -> Font.Font -> Font.Font -> IO GameState
-initGameState renderer font32 font16 = do
+initGameState :: SDL.Renderer -> Font.Font -> Font.Font -> Chunk -> IO GameState
+initGameState renderer font32 font16 bulletSound = do
   currentTime <- SDL.time
   let randGen = mkStdGen $ floor currentTime
   pure
@@ -526,6 +529,7 @@ initGameState renderer font32 font16 = do
     , gameStateBulletTimer         = 0.0
     , gameStateBulletTimerMax      = 3.0
     , gameStateBulletAgeMax        = 150
+    , gameStateBulletSound         = bulletSound
     , gameStateAsteroids           = initAsteroids
     , gameStateAsteroidSpawnTimer  = initTimer currentTime
     , gameStateAsteroidSpawnDelta  = initAsteroidSpawnDelta
@@ -545,14 +549,18 @@ run = do
 
   window <- SDL.createWindow "Asteroids" windowConfig
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
+  Mixer.openAudio Mixer.defaultAudio 1024
   Font.initialize
   fNoticia32 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 32
   fNoticia16 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 16
-  state <- initGameState renderer fNoticia32 fNoticia16
+  bulletSound <- Mixer.load "./assets/sounds/laserShoot.wav"
+  state <- initGameState renderer fNoticia32 fNoticia16 bulletSound
 
   loop state
 
   Font.quit
+  Mixer.free bulletSound
+  Mixer.closeAudio
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
 
