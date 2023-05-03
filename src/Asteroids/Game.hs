@@ -162,6 +162,7 @@ data GameState
   , gameStateStatus              :: GameStatus
   , gameStateScene               :: Scene
   , gameStateMainMenu            :: MainMenuState
+  , gameStateIOEvents            :: [IOEvent]
   }
 
 data MainMenuState
@@ -541,6 +542,7 @@ initGameState renderer font32 font16 bulletSound = do
     , gameStateStatus              = MainMenu
     , gameStateScene               = mainMenuScene
     , gameStateMainMenu            = initMainMenu
+    , gameStateIOEvents            = mempty
     }
 
 run :: IO ()
@@ -632,13 +634,27 @@ loop state@GameState {..} = do
                             , gameStateButtonState = buttonState'
                             , gameStateFps         = fps
                             }) gameStateScene
+  state'' <- runIOEvents state'
   unless (qPressed || gameStateStatus == ShouldQuit) $ do
-    loop state' { gameStatePlayerShip = (getShip state') { shipAcceleration = V2 0.0 0.0 }
-                , gameStateButtonState = resetPressedFlags buttonState'
-                }
+    loop state'' { gameStatePlayerShip = (getShip state') { shipAcceleration = V2 0.0 0.0 }
+                 , gameStateButtonState = resetPressedFlags buttonState'
+                 }
   where
     getShip :: GameState -> Ship
     getShip GameState {..} = gameStatePlayerShip
+
+newtype IOEvent
+  = PlaySound Text
+  deriving (Eq, Show)
+
+addEvent :: GameState -> IOEvent -> GameState
+addEvent gs event = gs { gameStateIOEvents = event : gameStateIOEvents gs }
+
+runIOEvents :: GameState -> IO GameState
+runIOEvents gs@GameState {..} = do
+  forM_ gameStateIOEvents $ \case
+    PlaySound _ -> Mixer.play gameStateBulletSound
+  pure gs { gameStateIOEvents = mempty }
 
 mainScene :: Scene
 mainScene
@@ -670,7 +686,8 @@ update state@GameState {..} =
       bulletTimer
         | keyDown (buttonStateFire gameStateButtonState) && (gameStateBulletTimer + delta < gameStateBulletTimerMax) = gameStateBulletTimer + delta
         | otherwise = 0.0
-      bullets = if keyDown (buttonStateFire gameStateButtonState) && (bulletTimer == 0)
+      shouldFireBullet = keyDown (buttonStateFire gameStateButtonState) && (bulletTimer == 0)
+      bullets = if shouldFireBullet
         then fireBullet
              (shipPosition gameStatePlayerShip)
              (shipRotation gameStatePlayerShip)
@@ -690,7 +707,10 @@ update state@GameState {..} =
                          , gameStateAsteroidSpawnTimer = updateTimer gameStateAsteroidSpawnTimer gameStateCurrentTime
                          , gameStateBulletTimer = bulletTimer
                          }
-  in spawnRandomAsteroid . updateBulletAge $ nextState
+      nextState'
+        | shouldFireBullet = addEvent nextState $ PlaySound "foo"
+        | otherwise = nextState
+  in spawnRandomAsteroid . updateBulletAge $ nextState'
 
 data CollisionResult
   = BulletAndAsteroidCollisions Int (Deque Bullet) (Deque Asteroid)
