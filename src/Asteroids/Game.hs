@@ -558,13 +558,22 @@ run = do
   fNoticia32 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 32
   fNoticia16 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 16
   bulletSound <- Mixer.load "./assets/sounds/laserShoot.wav"
-  let sounds = M.fromList [("fire-bullet", bulletSound)]
+  smallExplosionSound <- Mixer.load "./assets/sounds/small-explosion.wav"
+  bigExplosionSound <- Mixer.load "./assets/sounds/big-explosion.wav"
+  let sounds
+        = M.fromList
+        [ ("fire-bullet", bulletSound)
+        , ("small-explosion", smallExplosionSound)
+        , ("big-explosion", bigExplosionSound)
+        ]
   state <- initGameState renderer fNoticia32 fNoticia16 sounds
 
   loop state
 
   Font.quit
   Mixer.free bulletSound
+  Mixer.free smallExplosionSound
+  Mixer.free bigExplosionSound
   Mixer.closeAudio
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
@@ -718,7 +727,7 @@ update state@GameState {..} =
   in spawnRandomAsteroid . updateBulletAge $ nextState'
 
 data CollisionResult
-  = BulletAndAsteroidCollisions Int (Deque Bullet) (Deque Asteroid)
+  = BulletAndAsteroidCollisions Int AsteroidSize (Deque Bullet) (Deque Asteroid)
   | ShipCollision
   deriving (Eq, Show)
 
@@ -726,7 +735,7 @@ handleCollisionResults :: GameState -> [CollisionResult] -> GameState
 handleCollisionResults = foldl' handleCollision
   where
     handleCollision :: GameState -> CollisionResult -> GameState
-    handleCollision gameState (BulletAndAsteroidCollisions numCols bs as) =
+    handleCollision gameState (BulletAndAsteroidCollisions numCols siz bs as) =
       let (randVelocityScale, randGen) = uniformR (2.0, 3.0) $ gameStateRandGen gameState
           nextSpawnDelta
             | numCols /= 0 =
@@ -735,6 +744,9 @@ handleCollisionResults = foldl' handleCollision
           nextSpawnFactor
             | numCols /= 0 = gameStateAsteroidSpawnFactor gameState * 1.1
             | otherwise    = gameStateAsteroidSpawnFactor gameState
+          ioEvents
+            | numCols /= 0 = PlaySound (asteroidSoundFromSize siz) : gameStateIOEvents gameState
+            | otherwise    = mempty
       in gameState
          { gameStateBullets = filterDeadBullets bs
          , gameStateAsteroids = filterDeadAsteroids randVelocityScale as
@@ -742,6 +754,7 @@ handleCollisionResults = foldl' handleCollision
          , gameStateRandGen = randGen
          , gameStateAsteroidSpawnDelta = nextSpawnDelta
          , gameStateAsteroidSpawnFactor = nextSpawnFactor
+         , gameStateIOEvents = ioEvents
          }
     handleCollision gameState ShipCollision
       = gameState
@@ -749,27 +762,30 @@ handleCollisionResults = foldl' handleCollision
       , gameStateScene = gameOverScene
       }
 
+    asteroidSoundFromSize Big = "big-explosion"
+    asteroidSoundFromSize Small = "small-explosion"
+
 checkAsteroidCollisions :: Deque Asteroid -> Deque Bullet -> CollisionResult
 checkAsteroidCollisions asteroids bullets =
-  let (bs, as, colNum) = foldl' handleBulletCollision (mempty, asteroids, 0) bullets
-  in BulletAndAsteroidCollisions colNum bs as
+  let (bs, as, colNum, siz) = foldl' handleBulletCollision (mempty, asteroids, 0, Small) bullets
+  in BulletAndAsteroidCollisions colNum siz bs as
   where
     handleBulletCollision
-      :: (Deque Bullet, Deque Asteroid, Int)
+      :: (Deque Bullet, Deque Asteroid, Int, AsteroidSize)
       -> Bullet
-      -> (Deque Bullet, Deque Asteroid, Int)
-    handleBulletCollision (bs, as, colNum) bullet =
-      let (b, updatedAs, colNum') = go (bullet, [], 0) bullet (Exts.toList as)
-      in (D.snoc b bs, Exts.fromList updatedAs, colNum + colNum')
+      -> (Deque Bullet, Deque Asteroid, Int, AsteroidSize)
+    handleBulletCollision (bs, as, colNum, siz) bullet =
+      let (b, updatedAs, colNum', siz') = go (bullet, [], 0, siz) bullet (Exts.toList as)
+      in (D.snoc b bs, Exts.fromList updatedAs, colNum + colNum', siz')
 
     -- | The state of this recursion is @(Final state of the Input
     -- Bullet, List of Asteroids that may have dead flag set)@
-    go :: (Bullet, [Asteroid], Int) -> Bullet -> [Asteroid] -> (Bullet, [Asteroid], Int)
-    go (b, accAs, colNum) _ [] = (b, accAs, colNum)
-    go (accBullet, accAsteroids, colNum) b (a:as)
+    go :: (Bullet, [Asteroid], Int, AsteroidSize) -> Bullet -> [Asteroid] -> (Bullet, [Asteroid], Int, AsteroidSize)
+    go (b, accAs, colNum, siz) _ [] = (b, accAs, colNum, siz)
+    go (accBullet, accAsteroids, colNum, siz) b (a:as)
       | isColliding a b =
-        (b { bulletIsDead = True }, (a { asteroidIsDead = True } : accAsteroids) ++ as, 1)
-      | otherwise = go (accBullet, a : accAsteroids, colNum) b as
+        (b { bulletIsDead = True }, (a { asteroidIsDead = True } : accAsteroids) ++ as, 1, getNextSizeUp a siz)
+      | otherwise = go (accBullet, a : accAsteroids, colNum, siz) b as
 
     isColliding :: Asteroid -> Bullet -> Bool
     isColliding a b
@@ -778,6 +794,12 @@ checkAsteroidCollisions asteroids bullets =
         let aBox = getCollisionBox a
             bBox = getCollisionBox b
         in isCollidingBox aBox bBox
+
+    getNextSizeUp :: Asteroid -> AsteroidSize -> AsteroidSize
+    getNextSizeUp _ Big = Big
+    getNextSizeUp Asteroid {..} Small
+      | asteroidSize == Big = Big
+      | otherwise = Small
 
 checkShipCollision :: Ship -> Deque Asteroid -> Maybe CollisionResult
 checkShipCollision ship asteroids
