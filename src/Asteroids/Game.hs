@@ -12,6 +12,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Deque.Strict (Deque)
 import qualified Deque.Strict as D
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import qualified Data.Vector.Storable as VS
 import Foreign.C.Types
 import qualified GHC.Exts as Exts
@@ -147,7 +149,6 @@ data GameState
   , gameStateBulletTimer         :: Float
   , gameStateBulletTimerMax      :: Float
   , gameStateBulletAgeMax        :: Int
-  , gameStateBulletSound         :: Chunk
   , gameStateAsteroids           :: Deque Asteroid
   , gameStateAsteroidSpawnTimer  :: Timer
   , gameStateAsteroidSpawnDelta  :: Float
@@ -162,6 +163,7 @@ data GameState
   , gameStateStatus              :: GameStatus
   , gameStateScene               :: Scene
   , gameStateMainMenu            :: MainMenuState
+  , gameStateSoundMap            :: Map Text Chunk
   , gameStateIOEvents            :: [IOEvent]
   }
 
@@ -513,8 +515,8 @@ initPlayerShip
 initMainMenu :: MainMenuState
 initMainMenu = mkMenu [Start, Quit]
 
-initGameState :: SDL.Renderer -> Font.Font -> Font.Font -> Chunk -> IO GameState
-initGameState renderer font32 font16 bulletSound = do
+initGameState :: SDL.Renderer -> Font.Font -> Font.Font -> Map Text Chunk -> IO GameState
+initGameState renderer font32 font16 soundMap = do
   currentTime <- SDL.time
   let randGen = mkStdGen $ floor currentTime
   pure
@@ -530,7 +532,6 @@ initGameState renderer font32 font16 bulletSound = do
     , gameStateBulletTimer         = 0.0
     , gameStateBulletTimerMax      = 3.0
     , gameStateBulletAgeMax        = 150
-    , gameStateBulletSound         = bulletSound
     , gameStateAsteroids           = initAsteroids
     , gameStateAsteroidSpawnTimer  = initTimer currentTime
     , gameStateAsteroidSpawnDelta  = initAsteroidSpawnDelta
@@ -543,6 +544,7 @@ initGameState renderer font32 font16 bulletSound = do
     , gameStateScene               = mainMenuScene
     , gameStateMainMenu            = initMainMenu
     , gameStateIOEvents            = mempty
+    , gameStateSoundMap            = soundMap
     }
 
 run :: IO ()
@@ -556,7 +558,8 @@ run = do
   fNoticia32 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 32
   fNoticia16 <- Font.load "./assets/fonts/NoticiaText-Bold.ttf" 16
   bulletSound <- Mixer.load "./assets/sounds/laserShoot.wav"
-  state <- initGameState renderer fNoticia32 fNoticia16 bulletSound
+  let sounds = M.fromList [("fire-bullet", bulletSound)]
+  state <- initGameState renderer fNoticia32 fNoticia16 sounds
 
   loop state
 
@@ -653,7 +656,9 @@ addEvent gs event = gs { gameStateIOEvents = event : gameStateIOEvents gs }
 runIOEvents :: GameState -> IO GameState
 runIOEvents gs@GameState {..} = do
   forM_ gameStateIOEvents $ \case
-    PlaySound _ -> Mixer.play gameStateBulletSound
+    PlaySound soundName -> case M.lookup soundName gameStateSoundMap of
+      Nothing -> pure ()
+      Just chunk -> Mixer.play chunk
   pure gs { gameStateIOEvents = mempty }
 
 mainScene :: Scene
@@ -708,7 +713,7 @@ update state@GameState {..} =
                          , gameStateBulletTimer = bulletTimer
                          }
       nextState'
-        | shouldFireBullet = addEvent nextState $ PlaySound "foo"
+        | shouldFireBullet = addEvent nextState $ PlaySound "fire-bullet"
         | otherwise = nextState
   in spawnRandomAsteroid . updateBulletAge $ nextState'
 
